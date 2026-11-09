@@ -10,7 +10,8 @@ This plugin rewrites the program so the tip follows the path:
 - **Into the cut:** each cut starts at the material top and ramps to full depth along the path, so the blade lines
   up while it's shallow.
 - **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving.
-- **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default, each left as a comment; M5 stays.
+- **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default; each line is left commented out and marked
+  "removed by Drag Knife". M5 stays.
 - **Lead-in corners (optional):** at corners sharper than *Lead in above*, the blade hops up, comes down behind the
   corner on the next line extended, and cuts into the corner along it, so it's lined up before the cut begins. That
   leaves a short tapered slit past the corner; *Keep lead-ins off* chooses the side it may go (the inside of shapes

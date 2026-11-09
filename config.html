@@ -75,7 +75,7 @@
         title="In the program's units. Moves below this are cuts. 0 when Z0 is the top of the material."></div>
     </div>
     <label class="dk-check"><input type="checkbox" id="dk-stripSpindle">
-      <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed command is left as a comment.</span></span></label>
+      <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span></span></label>
     <div class="dk-sub">Into and out of each cut</div>
     <div class="dk-grid">
       <div class="dk-field"><label for="dk-rampLength">Ramp in over (mm)</label><input class="dk-input" id="dk-rampLength" inputmode="decimal"
@@ -289,8 +289,10 @@ var DragKnife = (function () {
     var removed = [];
     var code = p.code.replace(/M\s*0*[34](?![\d.])|S\s*[-+]?(?:\d+\.?\d*|\.\d+)/gi, function (m) { removed.push(m.replace(/\s+/g, '').toUpperCase()); return ' '; });
     code = code.replace(/\s+/g, ' ').trim();
-    var note = '(dk: removed ' + removed.join(' ') + ')';
-    return (code ? code + ' ' : '') + note + (p.comment ? ' ' + p.comment : '');
+    // The original line, commented out, says who removed it. A ';' comment runs to
+    // the end of the line, so the original's own comments can stay inside it.
+    if (!code) return '; ' + raw.trim() + '  (removed by Drag Knife)';
+    return code + ' ; ' + raw.trim() + '  (Drag Knife removed ' + removed.join(' ') + ')';
   }
 
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }

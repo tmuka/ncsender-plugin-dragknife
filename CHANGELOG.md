@@ -12,4 +12,5 @@
   corners, overlapping shapes, a shape that crosses itself), with a button for the manual choice.
 - An animation in the dialog: the knife cutting a sample part with a notch and a hole under the current corner settings,
   slits in the waste and slits into the part coloured.
-- Spindle starts (M3/M4) and S speeds are removed by default, each left as a comment; M5 stays.
+- Spindle starts (M3/M4) and S speeds are removed by default; each line is left commented out and marked
+  "removed by Drag Knife"; M5 stays.

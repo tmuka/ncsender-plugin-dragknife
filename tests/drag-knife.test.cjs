@@ -146,8 +146,13 @@ test('spindle starts and speeds are removed; M5 and M30 stay', () => {
   assert.strictEqual(res.stats.spindleRemoved, 2);
   assert.ok(!/^[^(;]*\bM0*[34](?![\d.])/m.test(out.replace(/\([^)]*\)/g, '')), 'no M3/M4 left:\n' + out);
   assert.ok(!/^[^(;]*S\d/m.test(out.replace(/\([^)]*\)/g, '')), 'no S words left');
-  assert.match(out, /^\(dk: removed M3 S18000\) ; Start spindle$/m);
-  assert.match(out, /^\(dk: removed S12000 M4\)$/m);
+  assert.match(out, /^; M3 S18000 ; Start spindle  \(removed by Drag Knife\)$/m);
+  assert.match(out, /^; S12000M4  \(removed by Drag Knife\)$/m);
+  // part of a line: the rest stays, the original follows commented out
+  const part = DK.process(prog(['G0 X0 Y0 S500', 'G1 Z-0.3 F200', 'G1 X5 F500']), cfg).text;
+  assert.match(part, /^G0 X0 Y0 ; G0 X0 Y0 S500  \(Drag Knife removed S500\)$/m);
+  // the commented-out lines are comments to the parser too: nothing to strip a second time
+  for (const l of out.split('\n').filter(l => l.startsWith(';'))) assert.strictEqual(DK.parseLine(l).words.length, 0, l);
   assert.match(out, /^M5 ; Stop spindle$/m);
   assert.match(out, /^M30$/m);
   assert.match(out, /^M6 T27/m);
