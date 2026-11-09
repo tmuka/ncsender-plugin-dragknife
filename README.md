@@ -10,6 +10,7 @@ This plugin rewrites the program so the tip follows the path:
 - **Into the cut:** each cut starts at the material top and ramps to full depth along the path, so the blade lines
   up while it's shallow.
 - **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving.
+- **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default, each left as a comment; M5 stays.
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 

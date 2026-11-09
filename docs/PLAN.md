@@ -160,7 +160,7 @@ the chosen `r`.
 1. **Done in 0.1.0 (test builds):** parser, cut splitter, lines and arcs (exact), swivels, helical lifted swivels,
    ramp-in, closed-shape overlap at final depth and lift-out, inch programs, guards (G91, G41/42, G18/19 arcs,
    canned cycles, commands inside a cut, already processed), the button dialog, drag simulator tests.
-   Not yet: spindle commands are left as written (no stripping), closed shapes start where the program starts them.
+   0.1.0-test.2 adds spindle stripping (M3/M4 and S removed, on by default; M5 kept). Not yet: closed shapes start where the program starts them.
 2. On the machine: cut squares, stars and circles in vinyl and card; tune the defaults.
 3. Calibration programs (offset ladder) in the dialog.
 4. Optional automatic processing on load, by tool number (`onGcodeProgramLoad` in `commands.js`, off by default).

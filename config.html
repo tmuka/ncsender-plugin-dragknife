@@ -33,6 +33,8 @@
   .dk-note[data-state="bad"] { color: var(--dk-danger); }
   .dk-note[data-state="warn"] { color: var(--dk-warn); }
   .dk-note ul { margin: 6px 0 0; padding-left: 20px; }
+  .dk-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; cursor: pointer; }
+  .dk-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--color-accent); }
 </style>
 
 <div class="dk-wrapper">
@@ -60,6 +62,8 @@
       <div class="dk-field"><label for="dk-surfaceZ">Material top Z</label><input class="dk-input" id="dk-surfaceZ" inputmode="decimal"
         title="In the program's units. Moves below this are cuts. 0 when Z0 is the top of the material."></div>
     </div>
+    <label class="dk-check"><input type="checkbox" id="dk-stripSpindle">
+      <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed command is left as a comment.</span></span></label>
     <div class="dk-sub">Into and out of each cut</div>
     <div class="dk-grid">
       <div class="dk-field"><label for="dk-rampLength">Ramp in over (mm)</label><input class="dk-input" id="dk-rampLength" inputmode="decimal"
@@ -119,7 +123,8 @@ var DragKnife = (function () {
     liftOut: 0.5,        // mm; closed shapes lift out over this, moving forward
     liftAngle: 0,        // degrees; 0 = off. Turns sharper than this lift during the swivel
     liftFraction: 0.5,   // how far up toward the surface the blade lifts (0..1)
-    liftRamp: 1          // mm; after a lifted swivel, back to depth over this
+    liftRamp: 1,         // mm; after a lifted swivel, back to depth over this
+    stripSpindle: true   // remove spindle starts (M3/M4) and speeds (S): a knife must never spin
   };
 
   // ---------- vectors ----------
@@ -219,12 +224,25 @@ var DragKnife = (function () {
   function readSettings(raw) {
     var s = {};
     for (var k in DEFAULTS) {
+      if (typeof DEFAULTS[k] === 'boolean') { s[k] = raw && typeof raw[k] === 'boolean' ? raw[k] : DEFAULTS[k]; continue; }
       var n = raw && raw[k] !== undefined && raw[k] !== '' ? Number(raw[k]) : DEFAULTS[k];
       s[k] = isFinite(n) ? n : DEFAULTS[k];
     }
     if (s.offset < 0) s.offset = 0;
     s.liftFraction = Math.max(0, Math.min(1, s.liftFraction));
     return s;
+  }
+
+  // Remove M3/M4 and S words from a line, keeping the rest and saying what went.
+  // Returns null when there's nothing to remove. M5 (spindle off) stays.
+  function stripSpindleWords(raw) {
+    var p = parseLine(raw);
+    if (p.special || !p.words.some(function (w) { return (w.l === 'M' && (w.v === 3 || w.v === 4)) || w.l === 'S'; })) return null;
+    var removed = [];
+    var code = p.code.replace(/M\s*0*[34](?![\d.])|S\s*[-+]?(?:\d+\.?\d*|\.\d+)/gi, function (m) { removed.push(m.replace(/\s+/g, '').toUpperCase()); return ' '; });
+    code = code.replace(/\s+/g, ' ').trim();
+    var note = '(dk: removed ' + removed.join(' ') + ')';
+    return (code ? code + ' ' : '') + note + (p.comment ? ' ' + p.comment : '');
   }
 
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
@@ -237,7 +255,7 @@ var DragKnife = (function () {
     if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var st = { mm: true, abs: true, arcAbs: false, plane: 17, comp: 40, motion: 0, f: null, pos: { x: null, y: null, z: null } };
     var out = [];
-    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, tightArcs: 0, units: null };
+    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, tightArcs: 0, spindleRemoved: 0, units: null };
     var stroke = null;
     var surface = cfg.surfaceZ;
 
@@ -253,7 +271,12 @@ var DragKnife = (function () {
     }
 
     for (var n = 0; n < lines.length; n++) {
-      var raw = lines[n], p = parseLine(raw);
+      var raw = lines[n];
+      if (cfg.stripSpindle) {
+        var stripped = stripSpindleWords(raw);
+        if (stripped !== null) { raw = stripped; stats.spindleRemoved++; }
+      }
+      var p = parseLine(raw);
       if (p.special) { if (stroke) fail(n, '"' + p.code + '" in the middle of a cut.'); out.push(raw); continue; }
       var g = [], other = {}, axes = {}, hasAxis = false;
       for (var w = 0; w < p.words.length; w++) {
@@ -357,6 +380,7 @@ var DragKnife = (function () {
     var u = stats.units === 'in' ? 'in' : 'mm';
     var header = '(' + VERSION_TAG + ' processed: offset ' + fmt(cfg.offset) + 'mm, swivel above ' + fmt(cfg.swivelAngle) +
       'deg, ramp ' + fmt(cfg.rampLength) + 'mm, lift ' + (cfg.liftAngle > 0 ? 'above ' + fmt(cfg.liftAngle) + 'deg' : 'off') +
+      ', spindle ' + (cfg.stripSpindle ? 'removed' : 'kept') +
       (meta && meta.source ? ', from ' + String(meta.source).replace(/[()]/g, '') : '') + ', program in ' + u + ')';
     var at = out.length && /^\s*%/.test(out[0]) ? 1 : 0;
     out.splice(at, 0, header);
@@ -522,7 +546,7 @@ var DragKnife = (function () {
 
   return {
     DEFAULTS: DEFAULTS, process: process, readSettings: readSettings, isProcessed: isProcessed,
-    parseLine: parseLine, _internal: { turn: turn, tangentAt: tangentAt, elemLen: elemLen, splitAt: splitAt, sweepOf: sweepOf, centerFromR: centerFromR }
+    parseLine: parseLine, stripSpindleWords: stripSpindleWords, _internal: { turn: turn, tangentAt: tangentAt, elemLen: elemLen, splitAt: splitAt, sweepOf: sweepOf, centerFromR: centerFromR }
   };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
@@ -546,6 +570,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       save();
     });
   });
+  var strip = $('dk-stripSpindle');
+  strip.checked = !!cfg.stripSpindle;
+  strip.addEventListener('change', function() { cfg.stripSpindle = strip.checked; save(); });
   function save() {
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
   }
@@ -598,6 +625,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       note(warn.length ? 'warn' : 'ok',
         'Loaded <span class="dk-file">' + esc(newName) + '</span>: ' + plural(s.rewritten, 'cut') + ' rewritten (' + s.closed + ' closed), ' +
         plural(s.swivels, 'corner swivel') + (s.lifted ? ', ' + s.lifted + ' lifted' : '') + ', program in ' + (s.units || 'mm') + '. ' +
+        (s.spindleRemoved ? 'Spindle start removed from ' + plural(s.spindleRemoved, 'line') + '. ' : (cfg.stripSpindle ? '' : 'Spindle commands kept: make sure the spindle can’t start. ')) +
         'Check it in the preview before you run it.' + (warn.length ? '<ul><li>' + warn.map(esc).join('</li><li>') + '</li></ul>' : ''));
       await readLoaded();
       btn.disabled = true; // the loaded program is now the processed one

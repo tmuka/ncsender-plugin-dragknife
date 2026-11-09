@@ -104,7 +104,7 @@ test('programs and parts it leaves alone', () => {
   assert.throws(() => DK.process(processed, cfg), /already been processed/);
 
   assert.throws(() => DK.process(prog(['G0 X0 Y0', 'G1 Z-0.3', 'G91 G1 X5']), cfg), /Line \d+: incremental/);
-  assert.throws(() => DK.process(prog(['G0 X0 Y0', 'G1 Z-0.3', 'M3 S1000', 'G1 X5']), cfg), /in the middle of a cut/);
+  assert.throws(() => DK.process(prog(['G0 X0 Y0', 'G1 Z-0.3', 'M8', 'G1 X5']), cfg), /in the middle of a cut/);
   assert.throws(() => DK.process(prog(['G0 X0 Y0', 'G41 G1 Z-0.3', 'G1 X5']), cfg), /compensation/);
 });
 
@@ -137,6 +137,29 @@ test('a cut that starts at the surface: feed move, not a rapid; overlap at final
   const c = compare(t, res.text, R, { corners: [{ x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] });
   assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
   for (const d of c.corners) assert.ok(d < TOL, 'corner ' + d);
+});
+
+test('spindle starts and speeds are removed; M5 and M30 stay', () => {
+  const t = ['G21 G90 G17', 'M6 T27 ; Tool change', 'M3 S18000 ; Start spindle', 'G4 P2', 'G0 Z5', 'G0 X0 Y0', 'G1 Z-0.3 F200',
+    'G1 X10 F1000', 'G1 X10 Y10', 'G0 Z5', 'S12000M4', 'M5 ; Stop spindle', 'M30'].join('\n') + '\n';
+  const res = DK.process(t, cfg), out = res.text;
+  assert.strictEqual(res.stats.spindleRemoved, 2);
+  assert.ok(!/^[^(;]*\bM0*[34](?![\d.])/m.test(out.replace(/\([^)]*\)/g, '')), 'no M3/M4 left:\n' + out);
+  assert.ok(!/^[^(;]*S\d/m.test(out.replace(/\([^)]*\)/g, '')), 'no S words left');
+  assert.match(out, /^\(dk: removed M3 S18000\) ; Start spindle$/m);
+  assert.match(out, /^\(dk: removed S12000 M4\)$/m);
+  assert.match(out, /^M5 ; Stop spindle$/m);
+  assert.match(out, /^M30$/m);
+  assert.match(out, /^M6 T27/m);
+  assert.match(out.split('\n')[0], /spindle removed/);
+
+  const kept = DK.process(t, { offset: R, stripSpindle: false });
+  assert.strictEqual(kept.stats.spindleRemoved, 0);
+  assert.match(kept.text, /^M3 S18000 ; Start spindle$/m);
+  // M3 in the middle of a cut stops processing only when it's kept
+  const mid = prog(['G0 X0 Y0', 'G1 Z-0.3', 'M3 S1000', 'G1 X5']);
+  assert.throws(() => DK.process(mid, { offset: R, stripSpindle: false }), /in the middle of a cut/);
+  assert.ok(DK.process(mid, cfg).changed);
 });
 
 test('a big program runs quickly', () => {
