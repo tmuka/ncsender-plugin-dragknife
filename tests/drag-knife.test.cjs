@@ -121,7 +121,21 @@ test('percent line stays first; header names the settings', () => {
   const res = DK.process('%\n' + square + '%\n', cfg);
   const lines = res.text.split('\n');
   assert.strictEqual(lines[0], '%');
-  assert.match(lines[1], /^\(dragknife processed: offset 0\.25mm/);
+  assert.match(lines[1], /^\(dragknife processed: program in mm, offset 0\.25mm/);
+});
+
+test('every line written fits Grbl, grblHAL and FluidNC: short, plain ASCII, no realtime characters', () => {
+  const long = 'M3 S18000 ; Spindle on! Is it up to speed? ~ a very long comment that goes on and on past any line buffer';
+  const t = ['%', long, 'G0 Z5', 'G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 F1000', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0', 'G0 Z5', 'M30'].join('\n') + '\n';
+  const res = DK.process(t, { ...cfg, leadInAngle: 60, liftAngle: 30 }, { source: 'a-really-long-file-name (copy) from quickcut rectangle profile, final ¡v2!.nc' });
+  const orig = new Set(t.split('\n'));
+  for (const l of res.text.split('\n').filter(l => !orig.has(l))) {
+    assert.ok(l.length <= 79, l.length + ': ' + l);
+    assert.ok(/^[\x20-\x7e]*$/.test(l) && !/[!?~]/.test(l), l);
+  }
+  assert.match(res.text, /^; M3 S18000 ; Spindle on Is it up to speed .*\.\.\.  \(removed by Drag Knife\)$/m);
+  assert.match(res.text, /^\(dragknife .*from a-really-long-file-name copy/m);
+  assert.throws(() => DK.process(res.text, cfg), /already been processed/);
 });
 
 test('a cut that starts at the surface: feed move, not a rapid; overlap at final depth', () => {
@@ -156,7 +170,7 @@ test('spindle starts and speeds are removed; M5 and M30 stay', () => {
   assert.match(out, /^M5 ; Stop spindle$/m);
   assert.match(out, /^M30$/m);
   assert.match(out, /^M6 T27/m);
-  assert.match(out.split('\n')[0], /spindle removed/);
+  assert.match(out.split('\n').slice(0, 4).join('\n'), /spindle removed/);
 
   const kept = DK.process(t, { offset: R, stripSpindle: false });
   assert.strictEqual(kept.stats.spindleRemoved, 0);

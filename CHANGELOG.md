@@ -14,3 +14,5 @@
   slits in the waste and slits into the part coloured.
 - Spindle starts (M3/M4) and S speeds are removed by default; each line is left commented out and marked
   "removed by Drag Knife"; M5 stays.
+- Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
+  lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.

@@ -283,6 +283,17 @@ var DragKnife = (function () {
 
   // Remove M3/M4 and S words from a line, keeping the rest and saying what went.
   // Returns null when there's nothing to remove. M5 (spindle off) stays.
+  // Every line we write stays short and plain so Grbl, grblHAL and FluidNC all take
+  // it: at most 79 characters (Grbl's line buffer; grblHAL and FluidNC keep comments
+  // in theirs), printable ASCII only, and no '!', '?' or '~', which the controllers
+  // can act on as realtime commands even inside a comment.
+  var LINE_MAX = 79;
+  function commentText(s, max) {
+    s = String(s).replace(/[^\x20-\x7e]|[!?~]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (max !== undefined && s.length > max) s = max > 3 ? s.slice(0, max - 3).trim() + '...' : '';
+    return s;
+  }
+
   function stripSpindleWords(raw) {
     var p = parseLine(raw);
     if (p.special || !p.words.some(function (w) { return (w.l === 'M' && (w.v === 3 || w.v === 4)) || w.l === 'S'; })) return null;
@@ -291,8 +302,20 @@ var DragKnife = (function () {
     code = code.replace(/\s+/g, ' ').trim();
     // The original line, commented out, says who removed it. A ';' comment runs to
     // the end of the line, so the original's own comments can stay inside it.
-    if (!code) return '; ' + raw.trim() + '  (removed by Drag Knife)';
-    return code + ' ; ' + raw.trim() + '  (Drag Knife removed ' + removed.join(' ') + ')';
+    var head = code ? code + ' ; ' : '; ', tail = code ? '(Drag Knife removed ' + removed.join(' ') + ')' : '(removed by Drag Knife)';
+    var quote = commentText(raw, LINE_MAX - head.length - tail.length - 2);
+    return head + (quote ? quote + '  ' : '') + tail;
+  }
+
+  // "(dragknife a, b, c)" lines, each within LINE_MAX.
+  function headerLines(parts) {
+    var lines = [], cur = '';
+    parts.forEach(function (part) {
+      if (cur && ('(' + VERSION_TAG + ' ' + cur + ', ' + part + ')').length > LINE_MAX) { lines.push(cur); cur = ''; }
+      cur = cur ? cur + ', ' + part : part;
+    });
+    if (cur) lines.push(cur);
+    return lines.map(function (l) { return '(' + VERSION_TAG + ' ' + l + ')'; });
   }
 
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
@@ -512,13 +535,16 @@ var DragKnife = (function () {
       return { text: text, stats: stats, changed: false };
     }
     var u = stats.units === 'in' ? 'in' : 'mm';
-    var header = '(' + VERSION_TAG + ' processed: offset ' + fmt(cfg.offset) + 'mm, swivel above ' + fmt(cfg.swivelAngle) +
-      'deg, ramp ' + fmt(cfg.rampLength) + 'mm, lift ' + (cfg.liftAngle > 0 ? 'above ' + fmt(cfg.liftAngle) + 'deg' : 'off') +
-      ', lead-in ' + (cfg.leadInAngle > 0 ? 'above ' + fmt(cfg.leadInAngle) + 'deg, ' + fmt(cfg.leadInLength) + 'mm, protect ' + cfg.protect : 'off') +
-      ', spindle ' + (cfg.stripSpindle ? 'removed' : 'kept') +
-      (meta && meta.source ? ', from ' + String(meta.source).replace(/[()]/g, '') : '') + ', program in ' + u + ')';
+    var header = headerLines([
+      'processed: program in ' + u,
+      'offset ' + fmt(cfg.offset) + 'mm', 'swivel above ' + fmt(cfg.swivelAngle) + 'deg', 'ramp ' + fmt(cfg.rampLength) + 'mm',
+      'lift ' + (cfg.liftAngle > 0 ? 'above ' + fmt(cfg.liftAngle) + 'deg' : 'off'),
+      'lead-in ' + (cfg.leadInAngle > 0 ? 'above ' + fmt(cfg.leadInAngle) + 'deg' : 'off')
+    ].concat(cfg.leadInAngle > 0 ? [fmt(cfg.leadInLength) + 'mm', 'protect ' + cfg.protect] : [],
+      ['spindle ' + (cfg.stripSpindle ? 'removed' : 'kept')],
+      meta && meta.source ? ['from ' + commentText(String(meta.source).replace(/[()]/g, ''), 50)] : []));
     var at = out.length && /^\s*%/.test(out[0]) ? 1 : 0;
-    out.splice(at, 0, header);
+    out.splice.apply(out, [at, 0].concat(header));
     return { text: out.join('\n') + '\n', stats: stats, changed: true };
   }
 
