@@ -1,0 +1,28 @@
+{
+  "id": "com.tmuka.drag-knife",
+  "name": "Drag Knife",
+  "version": "0.1.0",
+  "minAppVersion": "2.0.88",
+  "configUi": "config.html",
+  "icon": "icon.png",
+  "author": "tmuka",
+  "repository": "https://github.com/tmuka/ncsender-plugin-dragknife",
+  "description": "Turns the loaded program into one a drag knife cuts cleanly: the spindle runs ahead of the blade tip by the blade offset, swings around sharp corners so the tip turns in place, ramps into each cut so the blade lines up before full depth, and lifts out over recut ground. Arcs stay arcs. For vinyl, card, gasket and foam cut with a drag knife in the spindle.",
+  "category": "utility",
+  "platforms": {
+    "v2": "2.0.88",
+    "pro-v2": "2.0.149"
+  },
+  "events": [],
+  "permissions": [
+    "gcode.modify"
+  ],
+  "toolMenu": [
+    {
+      "id": "open-config",
+      "label": "Drag Knife",
+      "icon": "icon.png",
+      "clientOnly": true
+    }
+  ]
+}

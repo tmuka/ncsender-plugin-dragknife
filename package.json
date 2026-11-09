@@ -1,0 +1,12 @@
+{
+  "name": "ncsender-plugin-dragknife",
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "description": "ncSender plugin: post-processes the loaded program for a drag knife",
+  "private": true,
+  "scripts": {
+    "test": "node .scripts/inline.cjs --check && node --test tests/*.test.cjs",
+    "inline": "node .scripts/inline.cjs",
+    "build": "bash .scripts/build.sh"
+  }
+}
