@@ -11,6 +11,10 @@ This plugin rewrites the program so the tip follows the path:
   up while it's shallow.
 - **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving.
 - **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default, each left as a comment; M5 stays.
+- **Lead-in corners (optional):** at corners sharper than *Lead in above*, the blade hops up, comes down behind the
+  corner on the next line extended, and cuts into the corner along it, so it's lined up before the cut begins. That
+  leaves a short tapered slit past the corner; *Keep lead-ins off* chooses the side it may go (the inside of shapes
+  when cutting out parts, the outside when cutting holes). Corners on the protected side swivel instead.
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 

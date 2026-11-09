@@ -67,7 +67,7 @@ function drag(samples, r, surface = 0) {
     } else {
       tip = { x: tip.x + a.x - prev.x, y: tip.y + a.y - prev.y };
     }
-    if (tip && a.z < surface - 1e-9) tips.push({ x: tip.x, y: tip.y, z: a.z });
+    if (tip && a.z < surface - 1e-9) tips.push({ x: tip.x, y: tip.y, z: a.z, ax: a.x, ay: a.y });
     prev = a;
   }
   return tips;
@@ -96,4 +96,35 @@ function compare(original, processed, r, opts = {}) {
   return { maxDev, corners, tips: tips.length };
 }
 
-module.exports = { run, drag, distToPath, compare };
+// Like compare, but lead-in cuts are allowed: `zones` are segments {a, b} (the next
+// line extended behind a corner), and tips within `slack` of one count as on it.
+// Also reports, at each corner, the angle between the blade and the next line's
+// direction when the tip first reaches the corner after its lead-in.
+function compareWithLeads(original, processed, r, zones, slack, corners, surface = 0) {
+  const want = run(original, 0.05).filter(s => s.z < surface - 1e-9);
+  const tips = drag(run(processed, 0.005), r, surface);
+  const zoneDist = (p) => Math.min(...zones.map(z => distToPath(p, [z.a, z.b])));
+  let maxDev = 0, inZones = 0;
+  for (const t of tips) {
+    const d = distToPath(t, want);
+    if (d < 1e-3) continue;
+    if (zones.length && zoneDist(t) < slack) { inZones++; continue; }
+    maxDev = Math.max(maxDev, d);
+  }
+  const reach = corners.map(c => {
+    let best = Infinity, at = -1;
+    tips.forEach((t, i) => { const d = Math.hypot(t.x - c.x, t.y - c.y); if (d < best) { best = d; at = i; } });
+    return { dist: best, at };
+  });
+  const aligned = corners.map((c, i) => {
+    // the last sample within 0.02 of the corner: the tip leaving it along the next line
+    let idx = -1;
+    tips.forEach((t, j) => { if (Math.hypot(t.x - c.x, t.y - c.y) < 0.02) idx = j; });
+    if (idx < 0) return 180;
+    const t = tips[idx], bx = t.ax - t.x, by = t.ay - t.y;
+    return Math.abs(Math.atan2(c.dir.x * by - c.dir.y * bx, c.dir.x * bx + c.dir.y * by)) * 180 / Math.PI;
+  });
+  return { maxDev, inZones, reach: reach.map(x => x.dist), aligned };
+}
+
+module.exports = { run, drag, distToPath, compare, compareWithLeads };

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const DK = require('../lib/drag-knife.cjs');
-const { compare } = require('./sim.cjs');
+const { compare, compareWithLeads } = require('./sim.cjs');
 
 const R = 0.25;
 const cfg = { offset: R };
@@ -160,6 +160,56 @@ test('spindle starts and speeds are removed; M5 and M30 stay', () => {
   const mid = prog(['G0 X0 Y0', 'G1 Z-0.3', 'M3 S1000', 'G1 X5']);
   assert.throws(() => DK.process(mid, { offset: R, stripSpindle: false }), /in the middle of a cut/);
   assert.ok(DK.process(mid, cfg).changed);
+});
+
+test('lead-in corners: hop, lead in along the next line, blade lined up at the corner', () => {
+  const set = { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, protect: 'inside' };
+  const res = DK.process(square, set);
+  // the square goes anticlockwise: every corner is convex, every extension is outside
+  assert.strictEqual(res.stats.leadIns, 4, 'lead-ins ' + res.stats.leadIns);
+  assert.strictEqual(res.stats.swivels, 0);
+  assert.match(res.text, /^G0 Z1$/m, 'hops to 1 mm above the top');
+  // corners in cut order, with the direction of the line after each
+  const corners = [{ x: 20, y: 0, dir: { x: 0, y: 1 } }, { x: 20, y: 20, dir: { x: -1, y: 0 } }, { x: 0, y: 20, dir: { x: 0, y: -1 } },
+    { x: 0, y: 0, dir: { x: 1, y: 0 } }]; // the closing corner leads into the recut start
+  const zones = corners.map(c => ({ a: { x: c.x - c.dir.x * 1.5, y: c.y - c.dir.y * 1.5 }, b: c }));
+  const c = compareWithLeads(square, res.text, R, zones, 1.5 * R, corners);
+  assert.ok(c.maxDev < TOL, 'off the path outside the lead-in zones by ' + c.maxDev);
+  assert.ok(c.inZones > 0, 'the lead-ins were cut');
+  for (const d of c.reach) assert.ok(d < TOL, 'corner missed by ' + d);
+  for (const a of c.aligned) assert.ok(a < 3, 'blade ' + a.toFixed(1) + '° off the next line at the corner');
+});
+
+test('lead-in corners respect the protected side', () => {
+  // anticlockwise L-shape with one concave corner at (10,10)
+  const ell = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X20 Y0 F1000', 'G1 X20 Y10', 'G1 X10 Y10', 'G1 X10 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
+  const base = { offset: R, leadInAngle: 60 };
+  const inside = DK.process(ell, { ...base, protect: 'inside' }).stats;
+  const outside = DK.process(ell, { ...base, protect: 'outside' }).stats;
+  const none = DK.process(ell, { ...base, protect: 'none' }).stats;
+  // corners met: (20,0) (20,10) (10,10)concave (10,20) (0,20) and the close at (0,0)
+  assert.deepStrictEqual([inside.leadIns, inside.swivels], [5, 1], 'protect inside: the concave corner swivels');
+  assert.deepStrictEqual([outside.leadIns, outside.swivels], [1, 5], 'protect outside: only the concave corner leads in');
+  assert.deepStrictEqual([none.leadIns, none.swivels], [6, 0]);
+  // the same shape clockwise: the concave corner is a left turn now, same answer
+  const cw = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X0 Y20 F1000', 'G1 X10 Y20', 'G1 X10 Y10', 'G1 X20 Y10', 'G1 X20 Y0', 'G1 X0 Y0']);
+  assert.strictEqual(DK.process(cw, { ...base, protect: 'inside' }).stats.leadIns, 5);
+  // open paths: no inside or outside, so they swivel unless nothing is protected
+  const zig = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 Y2 F1000', 'G1 X0 Y4', 'G1 X10 Y6']);
+  assert.strictEqual(DK.process(zig, { ...base, protect: 'inside' }).stats.leadIns, 0);
+  assert.strictEqual(DK.process(zig, { ...base, protect: 'none' }).stats.leadIns, 2);
+  // lead-in corners don't also lift
+  const both = DK.process(square, { ...base, protect: 'inside', liftAngle: 45 }).stats;
+  assert.deepStrictEqual([both.leadIns, both.lifted], [4, 0]);
+});
+
+test('lead-ins in inch programs scale the length and hop', () => {
+  const sqIn = prog(['G0 X0 Y0', 'G1 Z-0.01 F8', 'G1 X1 Y0 F40', 'G1 X1 Y1', 'G1 X0 Y1', 'G1 X0 Y0'], 'G20');
+  const res = DK.process(sqIn, { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1 });
+  assert.strictEqual(res.stats.leadIns, 4);
+  assert.match(res.text, /^G0 Z0\.0394$/m);
+  // first lead-in: behind (1,0) along +Y by 1.5 mm, plus the offset: Y = (-1.5 + 0.25) / 25.4
+  assert.match(res.text, /^G0 X1 Y-0\.0492$/m);
 });
 
 test('a big program runs quickly', () => {

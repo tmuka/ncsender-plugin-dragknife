@@ -66,6 +66,18 @@ about its offset), and optionally replace those arcs with a swivel-style treatme
 
 Tangent-continuous joins (line→arc, arc→arc within the threshold) get no swivel: the tangent rule handles them.
 
+## Lead-in corners (0.1.0-test.3, the user's request 2026-11-09)
+
+At a turn sharper than `leadInAngle` (0 = off): the tip finishes the line at the corner C; hop to `surface + hopHeight`;
+rapid to the axis point for L = C − leadInLength·d2 (the next line extended behind C); drop to the surface; feed to
+C + r·d2 ramping to depth, so the blade has dragged `leadInLength` along d2 before the corner. The slit lies on d2's
+extension: on the right of the path at a left turn, the left at a right turn. With the shape's winding (signed
+area), that's outside the shape at convex corners and inside it at concave ones. `protect` (inside | outside | none)
+says which side must stay untouched; a corner whose slit would land there swivels instead. Open paths have no side:
+they swivel unless `protect` is none. Lead-in corners don't also lift.
+
+Later: `protect: auto` from nesting (a closed shape inside another is a hole, so protect its outside).
+
 ## Lead-in and lead-out (orienting the blade)
 
 At the plunge the blade points anywhere. It only turns when dragged through material, so orient it on the way in:
@@ -160,7 +172,7 @@ the chosen `r`.
 1. **Done in 0.1.0 (test builds):** parser, cut splitter, lines and arcs (exact), swivels, helical lifted swivels,
    ramp-in, closed-shape overlap at final depth and lift-out, inch programs, guards (G91, G41/42, G18/19 arcs,
    canned cycles, commands inside a cut, already processed), the button dialog, drag simulator tests.
-   0.1.0-test.2 adds spindle stripping (M3/M4 and S removed, on by default; M5 kept). Not yet: closed shapes start where the program starts them.
+   0.1.0-test.3 adds lead-in corners. 0.1.0-test.2 added spindle stripping (M3/M4 and S removed, on by default; M5 kept). Not yet: closed shapes start where the program starts them.
 2. On the machine: cut squares, stars and circles in vinyl and card; tune the defaults.
 3. Calibration programs (offset ladder) in the dialog.
 4. Optional automatic processing on load, by tool number (`onGcodeProgramLoad` in `commands.js`, off by default).
