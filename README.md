@@ -15,6 +15,9 @@ This plugin rewrites the program so the tip follows the path:
   corner on the next line extended, and cuts into the corner along it, so it's lined up before the cut begins. That
   leaves a short tapered slit past the corner; *Keep lead-ins off* chooses the side it may go (the inside of shapes
   when cutting out parts, the outside when cutting holes). Corners on the protected side swivel instead.
+  **Auto** (the default) works it out per shape: outlines are parts, a shape inside a part is a hole, a shape inside a
+  hole is a part again. The dialog says when it can't (open paths, overlapping shapes, a shape crossing itself) and
+  offers the manual choice; its animation shows where the slits land with the current settings.
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 

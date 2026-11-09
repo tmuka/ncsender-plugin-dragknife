@@ -212,6 +212,58 @@ test('lead-ins in inch programs scale the length and hop', () => {
   assert.match(res.text, /^G0 X1 Y-0\.0492$/m);
 });
 
+// a closed square cut as its own stroke; ccw = anticlockwise
+function sq(x0, y0, x1, y1, ccw = true) {
+  const pts = ccw ? [[x1, y0], [x1, y1], [x0, y1], [x0, y0]] : [[x0, y1], [x1, y1], [x1, y0], [x0, y0]];
+  return [`G0 X${x0} Y${y0}`, 'G1 Z-0.3 F200', ...pts.map(([x, y], i) => `G1 X${x} Y${y}` + (i ? '' : ' F1000')), 'G0 Z5'];
+}
+const leadsPerCut = (text) => text.split('(dk: cut').slice(1).map(c => (c.match(/^G0 Z1$/gm) || []).length);
+
+test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
+  const base = { offset: R, leadInAngle: 60 };
+  assert.strictEqual(DK.DEFAULTS.protect, 'auto');
+  for (const holeCcw of [true, false]) {
+    const t = prog([...sq(0, 0, 40, 40), ...sq(10, 10, 30, 30, holeCcw), ...sq(15, 15, 25, 25)]);
+    const res = DK.process(t, base);
+    // part: 4 corners + the close; hole: none (every slit would cut the part); island: a part again
+    assert.deepStrictEqual(leadsPerCut(res.text), [4, 0, 4], 'hole drawn ' + (holeCcw ? 'anticlockwise' : 'clockwise'));
+    assert.strictEqual(res.stats.holes, 1);
+    assert.deepStrictEqual(res.stats.autoProblems, []);
+  }
+  // manual "inside" treats the hole as a part too: its slits would cut into the part around it
+  const manual = DK.process(prog([...sq(0, 0, 40, 40), ...sq(10, 10, 30, 30)]), { ...base, protect: 'inside' });
+  assert.deepStrictEqual(leadsPerCut(manual.text), [4, 4]);
+  // the same outline cut twice (two depths): both are parts, neither is a hole
+  const twice = DK.process(prog([...sq(0, 0, 20, 20), ...sq(0, 0, 20, 20)]), base);
+  assert.strictEqual(twice.stats.holes, 0);
+  assert.deepStrictEqual(leadsPerCut(twice.text), [4, 4]);
+});
+
+test('analyze says when auto can\'t decide, and what to choose', () => {
+  const ok = DK.analyze(prog([...sq(0, 0, 40, 40), ...sq(10, 10, 30, 30)]), {});
+  assert.deepStrictEqual([ok.shapes, ok.holeCount, ok.problems, ok.suggest], [2, 1, [], null]);
+
+  const open = DK.analyze(prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 Y2 F1000', 'G1 X0 Y4', 'G1 X10 Y6']), {});
+  assert.strictEqual(open.suggest, 'none');
+  assert.match(open.problems[0], /1 open path has 2 sharp corners/);
+
+  const overlap = DK.analyze(prog([...sq(0, 0, 20, 20), ...sq(10, 10, 40, 40)]), {});
+  assert.strictEqual(overlap.overlaps, 1);
+  assert.match(overlap.problems.join(' '), /overlaps another/);
+  assert.strictEqual(overlap.suggest, 'inside');
+
+  const bowtie = DK.analyze(prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X20 Y20 F1000', 'G1 X20 Y0', 'G1 X0 Y20', 'G1 X0 Y0']), {});
+  assert.strictEqual(bowtie.selfCrossing, 1);
+  assert.match(bowtie.problems.join(' '), /crosses itself/);
+
+  // open paths beside shapes: reported, but no single manual choice suits both
+  const mixed = DK.analyze(prog([...sq(0, 0, 20, 20), 'G0 X30 Y0', 'G1 Z-0.3', 'G1 X40 Y2', 'G1 X30 Y4', 'G0 Z5']), {});
+  assert.strictEqual(mixed.problems.length, 1);
+  assert.strictEqual(mixed.suggest, null);
+  // process() carries the same problems into its stats
+  assert.strictEqual(DK.process(prog([...sq(0, 0, 20, 20), ...sq(10, 10, 40, 40)]), { offset: R, leadInAngle: 60 }).stats.autoProblems.length, 1);
+});
+
 test('a big program runs quickly', () => {
   const body = ['G0 X0 Y0'];
   for (let i = 0; i < 2000; i++) {

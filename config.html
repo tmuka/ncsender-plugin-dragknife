@@ -19,6 +19,17 @@
     font: inherit; font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; min-height: 38px; }
   .dk-input:focus { outline: none; border-color: var(--color-accent); }
   select.dk-input { text-align: left; font-family: inherit; }
+  select.dk-input.dk-warn { border-color: var(--dk-warn); }
+  .dk-auto { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 0.85rem; line-height: 1.45; color: var(--color-text-secondary); }
+  .dk-auto[hidden] { display: none; }
+  .dk-auto[data-state="warn"] { color: var(--dk-warn); }
+  .dk-auto ul { margin: 0; padding-left: 18px; flex: 1 1 100%; }
+  .dk-auto .dk-btn { min-height: 34px; padding: 4px 12px !important; }
+  .dk-demo { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; }
+  .dk-demo svg { width: 260px; max-width: 100%; height: auto; flex: none; }
+  .dk-legend { flex: 1 1 200px; display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.35; }
+  .dk-legend b { color: var(--color-text-primary); font-weight: 600; }
+  .dk-key { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 2px solid currentColor; }
   .dk-input.dk-bad { border-color: var(--dk-danger); }
   .dk-hint { font-size: 0.78rem; color: var(--color-text-secondary); }
   .dk-sub { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dk-accent-text); }
@@ -81,13 +92,27 @@
       <div class="dk-field"><label for="dk-hopHeight">Hop height (mm)</label><input class="dk-input" id="dk-hopHeight" inputmode="decimal"
         title="How high above the material top the blade travels from the corner to the lead-in start."></div>
       <div class="dk-field" style="grid-column: span 2"><label for="dk-protect">Keep lead-ins off</label>
-        <select class="dk-input" id="dk-protect" title="A lead-in cuts a short tapered slit on the next line extended past the corner: outside the shape at outside corners, into it at inside (notch) corners. Choose the side that's your part; corners whose lead-in would cut it swivel instead.">
+        <select class="dk-input" id="dk-protect" title="A lead-in cuts a short tapered slit on the next line extended past the corner: outside the shape at outside corners, into it at inside (notch) corners. Choose the side that's your part; corners whose lead-in would cut it swivel instead. Auto treats a shape inside another as a hole (and a shape inside a hole as a part again).">
+          <option value="auto">Auto (parts and holes)</option>
           <option value="inside">Inside of shapes (parts)</option>
           <option value="outside">Outside of shapes (holes)</option>
           <option value="none">Nothing (every corner)</option>
         </select></div>
     </div>
-    <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
+    <div class="dk-auto" id="dk-auto" hidden aria-live="polite"></div>
+    <div class="dk-demo">
+      <svg id="dk-demo-svg" viewBox="-8 -40 66 48" role="img" aria-label="Animation: the knife cutting a sample part with these corner settings"></svg>
+      <div class="dk-legend">
+        <div id="dk-demo-title"><b>How these settings cut a sample part</b></div>
+        <div><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>The cut you want; shaded is the part, with a hole</div>
+        <div><span class="dk-key" style="color: var(--dk-accent-text)"></span>What the blade cuts</div>
+        <div><span class="dk-key" style="color: var(--dk-warn)"></span>Lead-in slit in the waste</div>
+        <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
+        <div>Circle: the knife holder (hollow while hopping). Sizes exaggerated.</div>
+        <div id="dk-demo-stats"></div>
+      </div>
+    </div>
+    <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
     <div class="dk-sub">Lift at sharp corners (thick material)</div>
     <div class="dk-grid">
       <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" inputmode="decimal"
@@ -145,9 +170,9 @@ var DragKnife = (function () {
     leadInAngle: 0,      // degrees; 0 = off. Turns sharper than this hop up and lead back in along the next line
     leadInLength: 1.5,   // mm; the lead-in starts this far behind the corner, on the next line extended
     hopHeight: 1,        // mm above the material top while hopping to the lead-in
-    protect: 'inside'    // which side of a closed shape the lead-in cuts must not touch: 'inside', 'outside', 'none'
+    protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
   };
-  var PROTECT = ['inside', 'outside', 'none'];
+  var PROTECT = ['auto', 'inside', 'outside', 'none'];
 
   // ---------- vectors ----------
   function v(x, y) { return { x: x, y: y }; }
@@ -274,11 +299,95 @@ var DragKnife = (function () {
   function process(text, rawSettings, meta) {
     var cfg = readSettings(rawSettings);
     if (isProcessed(text)) throw new Error('This program has already been processed for the drag knife. Load the original file instead.');
+    var ctx = {}, found = null;
+    if (cfg.protect === 'auto' && cfg.leadInAngle > 0) {
+      // First pass: find the closed shapes, then which are holes.
+      found = analyzeWith(text, cfg, meta);
+      ctx.holes = found.holes;
+    }
+    var res = processPass(text, cfg, meta, ctx);
+    res.stats.autoProblems = found ? found.problems : [];
+    return res;
+  }
+
+  // What "auto" makes of a program, and whether it can decide.
+  // -> { shapes, holes: {n: true}, holeCount, openSharp, overlaps, selfCrossing, problems: [text], suggest }
+  // suggest: the manual choice to offer ('none' | 'inside' | 'outside'), or null.
+  function analyze(text, rawSettings) {
+    var cfg = readSettings(rawSettings);
+    if (cfg.leadInAngle <= 0) cfg.leadInAngle = 90; // judge the program as if lead-ins were on
+    return analyzeWith(text, cfg, null);
+  }
+  function analyzeWith(text, cfg, meta) {
+    var survey = { shapes: [], openSharp: 0, openPaths: 0 };
+    var c2 = {}; for (var k in cfg) c2[k] = cfg[k];
+    c2.protect = 'auto';
+    processPass(text, c2, meta, { survey: survey });
+    var nest = holesOf(survey.shapes);
+    var out = { shapes: survey.shapes.length, holes: nest.holes, holeCount: Object.keys(nest.holes).length,
+      openSharp: survey.openSharp, openPaths: survey.openPaths, overlaps: nest.overlaps, selfCrossing: nest.selfCrossing, problems: [], suggest: null };
+    if (survey.openSharp > 0) {
+      out.problems.push(survey.openPaths + ' open ' + (survey.openPaths === 1 ? 'path has' : 'paths have') + ' ' + survey.openSharp +
+        ' sharp ' + (survey.openSharp === 1 ? 'corner' : 'corners') + ' but no inside or outside, so auto swivels ' + (survey.openSharp === 1 ? 'it' : 'them') + '.');
+      if (!out.shapes) out.suggest = 'none';
+    }
+    if (nest.overlaps) out.problems.push(nest.overlaps + ' ' + (nest.overlaps === 1 ? 'shape overlaps' : 'shapes overlap') + ' another, so auto can\'t tell part from hole.');
+    if (nest.selfCrossing) out.problems.push(nest.selfCrossing + ' ' + (nest.selfCrossing === 1 ? 'shape crosses' : 'shapes cross') + ' itself, so its inside isn\'t clear.');
+    if ((nest.overlaps || nest.selfCrossing) && !out.suggest) out.suggest = 'inside';
+    return out;
+  }
+
+  // Closed shapes as polygons -> { strokeNumber: true } for each hole: a shape
+  // inside an odd number of larger shapes. A same-size shape (the same outline
+  // cut again deeper) doesn't count as containing it.
+  function holesOf(shapes) {
+    function inside(pt, poly) {
+      var c = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var a = poly[i], b = poly[j];
+        if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) c = !c;
+      }
+      return c;
+    }
+    function crosses(poly) {
+      var n = poly.length;
+      if (n > 3000) return false; // too big to check pair by pair; assume simple
+      function hit(a, b, c, d) {
+        var d1 = cross(sub(b, a), sub(c, a)), d2 = cross(sub(b, a), sub(d, a)), d3 = cross(sub(d, c), sub(a, c)), d4 = cross(sub(d, c), sub(b, c));
+        return d1 * d2 < -1e-12 && d3 * d4 < -1e-12;
+      }
+      for (var i = 0; i < n; i++) for (var j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        if (hit(poly[i], poly[(i + 1) % n], poly[j], poly[(j + 1) % n])) return true;
+      }
+      return false;
+    }
+    var holes = {}, overlaps = 0, selfCrossing = 0;
+    shapes.forEach(function (A) {
+      var depth = 0, overlapped = false;
+      if (crosses(A.poly)) selfCrossing++;
+      shapes.forEach(function (B) {
+        if (A === B || B.area < A.area * 1.0001 + 1e-9) return;
+        // most of A's points inside B (a point exactly on B's edge can go either way);
+        // some in and some out is an overlap
+        var hits = 0;
+        for (var i = 0; i < A.poly.length; i++) if (inside(A.poly[i], B.poly)) hits++;
+        var f = hits / A.poly.length;
+        if (f > 0.5) depth++;
+        if (f > 0.1 && f < 0.9) overlapped = true;
+      });
+      if (overlapped) overlaps++;
+      if (depth % 2 === 1) holes[A.n] = true;
+    });
+    return { holes: holes, overlaps: overlaps, selfCrossing: selfCrossing };
+  }
+
+  function processPass(text, cfg, meta, ctx) {
     var lines = text.split(/\r?\n/);
     if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var st = { mm: true, abs: true, arcAbs: false, plane: 17, comp: 40, motion: 0, f: null, pos: { x: null, y: null, z: null } };
     var out = [];
-    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, tightArcs: 0, spindleRemoved: 0, units: null };
+    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, units: null };
     var stroke = null;
     var surface = cfg.surfaceZ;
 
@@ -288,7 +397,7 @@ var DragKnife = (function () {
     function flush() {
       if (!stroke) return;
       stats.strokes++;
-      var res = rewriteStroke(stroke, st, cfg, stats);
+      var res = rewriteStroke(stroke, st, cfg, stats, ctx);
       for (var i = 0; i < res.length; i++) out.push(res[i]);
       stroke = null;
     }
@@ -431,7 +540,7 @@ var DragKnife = (function () {
   }
 
   // One cut: from the move that goes into the material to the one that leaves it.
-  function rewriteStroke(stroke, st, cfg, stats) {
+  function rewriteStroke(stroke, st, cfg, stats, ctx) {
     var recs = stroke.recs, scale = stroke.mm ? 1 : 1 / 25.4;
     var r = cfg.offset * scale, tol = 0.005 * scale, surface = cfg.surfaceZ;
     var verbatim = stroke.rawAll;
@@ -464,17 +573,30 @@ var DragKnife = (function () {
 
     var closed = dist(elems[0].from, elems[elems.length - 1].to) < tol && elems.length > 0;
     // Which way round a closed shape goes: +1 anticlockwise (inside on the left), -1 clockwise.
-    var orient = 0;
+    var orient = 0, protect = cfg.protect;
     if (closed) {
-      var area = 0;
+      var area = 0, poly = [];
       elems.forEach(function (e) {
-        var pts = e.kind === 'arc' ? [e.from, pointAt(e, 0.25), pointAt(e, 0.5), pointAt(e, 0.75)] : [e.from];
+        var pts = [e.from];
+        if (e.kind === 'arc') for (var q = 1; q < 16; q++) pts.push(pointAt(e, q / 16));
         pts.push(e.to);
-        for (var q = 1; q < pts.length; q++) area += cross(pts[q - 1], pts[q]);
+        for (var q2 = 1; q2 < pts.length; q2++) area += cross(pts[q2 - 1], pts[q2]);
+        for (var q3 = 0; q3 < pts.length - 1; q3++) poly.push(pts[q3]);
       });
       orient = area > 0 ? 1 : area < 0 ? -1 : 0;
+      if (ctx && ctx.survey) ctx.survey.shapes.push({ n: stats.strokes, poly: poly, area: Math.abs(area) / 2 });
+      if (protect === 'auto') {
+        var hole = !!(ctx && ctx.holes && ctx.holes[stats.strokes]);
+        protect = hole ? 'outside' : 'inside';
+        if (hole) stats.holes++;
+      }
     }
     var swRad = cfg.swivelAngle * Math.PI / 180, leadRad = cfg.leadInAngle * Math.PI / 180;
+    if (!closed && ctx && ctx.survey) {
+      var sharp = 0;
+      for (var oc = 1; oc < elems.length; oc++) if (Math.abs(turn(tangentAt(elems[oc - 1], 1), tangentAt(elems[oc], 0))) > Math.max(swRad, leadRad)) sharp++;
+      if (sharp) { ctx.survey.openPaths++; ctx.survey.openSharp += sharp; }
+    }
     // How to get round the corner between a and b: 'link' (let it drag), 'swivel' or 'lead'.
     // A lead-in cuts along b's line extended behind the corner. At a left turn that
     // extension is on the right of the path; at a right turn, on the left. So it's
@@ -483,10 +605,10 @@ var DragKnife = (function () {
       var tr = turn(tangentAt(a, 1), tangentAt(b, 0));
       if (Math.abs(tr) <= swRad) return 'link';
       if (cfg.leadInAngle > 0 && Math.abs(tr) > leadRad && b.z0 < surface) {
-        if (cfg.protect === 'none') return 'lead';
+        if (protect === 'none') return 'lead';
         if (orient !== 0) {
           var extOutside = (tr > 0) === (orient > 0);
-          if ((cfg.protect === 'inside') === extOutside) return 'lead';
+          if ((protect === 'inside') === extOutside) return 'lead';
         }
       }
       return 'swivel';
@@ -607,8 +729,59 @@ var DragKnife = (function () {
     return outL;
   }
 
+  // For pictures: the axis positions every `step` along a program's moves (G0-G3,
+  // absolute, G17; G53 lines read as "up out of the way"), and where a dragged
+  // blade's tip would be at each (it trails by r while below the surface, keeps
+  // its heading in the air).
+  function trace(text, step) {
+    var pos = { x: 0, y: 0, z: 10 }, motion = 0, arcAbs = false, out = [];
+    text.split(/\r?\n/).forEach(function (raw) {
+      var p = parseLine(raw);
+      if (p.special) return;
+      if (/G53\b/i.test(p.code)) { if (/Z/i.test(p.code)) pos = { x: pos.x, y: pos.y, z: 10 }; return; }
+      var ax = {}, isMove = false;
+      p.words.forEach(function (w) {
+        if (w.l === 'G') { var g = Math.round(w.v * 10) / 10; if (g <= 3 && g === Math.floor(g)) motion = g; if (g === 90.1) arcAbs = true; if (g === 91.1) arcAbs = false; }
+        else if ('XYZIJ'.indexOf(w.l) >= 0) { ax[w.l] = w.v; if ('XYZ'.indexOf(w.l) >= 0) isMove = true; }
+      });
+      if (motion >= 2 && (ax.I !== undefined || ax.J !== undefined)) isMove = true;
+      if (!isMove) return;
+      var to = { x: ax.X !== undefined ? ax.X : pos.x, y: ax.Y !== undefined ? ax.Y : pos.y, z: ax.Z !== undefined ? ax.Z : pos.z };
+      var n, i;
+      if (motion < 2) {
+        n = Math.max(1, Math.ceil(Math.hypot(to.x - pos.x, to.y - pos.y, to.z - pos.z) / step));
+        for (i = 1; i <= n; i++) out.push({ x: pos.x + (to.x - pos.x) * i / n, y: pos.y + (to.y - pos.y) * i / n, z: pos.z + (to.z - pos.z) * i / n });
+      } else {
+        var c = arcAbs ? v(ax.I !== undefined ? ax.I : pos.x, ax.J !== undefined ? ax.J : pos.y) : v(pos.x + (ax.I || 0), pos.y + (ax.J || 0));
+        var sw = sweepOf(pos, to, c, motion === 3), R = dist(pos, c), a0 = Math.atan2(pos.y - c.y, pos.x - c.x);
+        n = Math.max(2, Math.ceil(Math.abs(sw) * R / step));
+        for (i = 1; i <= n; i++) out.push({ x: c.x + R * Math.cos(a0 + sw * i / n), y: c.y + R * Math.sin(a0 + sw * i / n), z: pos.z + (to.z - pos.z) * i / n });
+      }
+      pos = to;
+    });
+    return out;
+  }
+  function dragTip(samples, r, surface) {
+    var tip = null, prev = null;
+    return samples.map(function (a, i) {
+      var inCut = a.z < surface - 1e-9;
+      if (tip === null) {
+        if (inCut) {
+          var j = i; while (j < samples.length - 1 && dist(samples[j + 1], a) < 1e-6) j++;
+          var b = samples[Math.min(j + 1, samples.length - 1)], d = dist(a, b) || 1;
+          tip = v(a.x - r * (b.x - a.x) / d, a.y - r * (b.y - a.y) / d);
+        }
+      } else if (inCut) {
+        var dd = dist(a, tip);
+        if (dd > 1e-12) tip = v(a.x - r * (a.x - tip.x) / dd, a.y - r * (a.y - tip.y) / dd);
+      } else tip = v(tip.x + a.x - prev.x, tip.y + a.y - prev.y);
+      prev = a;
+      return { x: a.x, y: a.y, z: a.z, tip: tip ? v(tip.x, tip.y) : null, cut: inCut && tip !== null };
+    });
+  }
+
   return {
-    DEFAULTS: DEFAULTS, process: process, readSettings: readSettings, isProcessed: isProcessed,
+    DEFAULTS: DEFAULTS, process: process, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
     parseLine: parseLine, stripSpindleWords: stripSpindleWords, _internal: { turn: turn, tangentAt: tangentAt, elemLen: elemLen, splitAt: splitAt, sweepOf: sweepOf, centerFromR: centerFromR }
   };
 })();
@@ -631,11 +804,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       if (bad) return;
       cfg[k] = stored(k, n);
       save();
+      if (k === 'leadInAngle' || k === 'swivelAngle' || k === 'surfaceZ') checkAuto();
+      if (k === 'leadInAngle' || k === 'swivelAngle') demo();
     });
   });
   var protect = $('dk-protect');
   protect.value = cfg.protect;
-  protect.addEventListener('change', function() { cfg.protect = protect.value; save(); });
+  protect.addEventListener('change', function() { cfg.protect = protect.value; save(); checkAuto(); demo(); });
   var strip = $('dk-stripSpindle');
   strip.checked = !!cfg.stripSpindle;
   strip.addEventListener('change', function() { cfg.stripSpindle = strip.checked; save(); });
@@ -643,7 +818,162 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
   }
 
-  var loaded = null;
+  var loaded = null, program = { name: null, text: null };
+  var PROTECT_LABEL = { inside: 'Inside of shapes', outside: 'Outside of shapes', none: 'Nothing (every corner)' };
+  async function loadProgramText() {
+    var name = loaded && loaded.filename;
+    if (!name) { program = { name: null, text: null }; return null; }
+    if (program.name === name && program.text !== null) return program.text;
+    try {
+      var r = await fetch(BASE_URL + '/api/gcode-files/current/download');
+      program = { name: name, text: r.ok ? await r.text() : null };
+    } catch (e) { program = { name: name, text: null }; }
+    return program.text;
+  }
+  // With Auto chosen and lead-ins on, say what auto makes of the loaded program,
+  // and when it can't decide, offer the manual choice instead.
+  async function checkAuto() {
+    var box = $('dk-auto'), sel = $('dk-protect');
+    sel.classList.remove('dk-warn');
+    if (cfg.protect !== 'auto' || !(cfg.leadInAngle > 0)) { box.hidden = true; return; }
+    var text = await loadProgramText();
+    if (!text || DragKnife.isProcessed(text)) { box.hidden = true; return; }
+    var a;
+    try { a = DragKnife.analyze(text, cfg); } catch (e) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = '';
+    if (!a.problems.length) {
+      box.removeAttribute('data-state');
+      box.textContent = a.shapes
+        ? 'Auto: ' + plural(a.shapes, 'closed shape') + ' in the loaded program, ' + (a.holeCount ? plural(a.holeCount, 'hole') : 'no holes') + '.'
+        : 'Auto: no closed shapes in the loaded program.';
+      return;
+    }
+    box.setAttribute('data-state', 'warn');
+    sel.classList.add('dk-warn');
+    var head = document.createElement('span');
+    head.textContent = 'Auto can’t decide everything in the loaded program:';
+    box.appendChild(head);
+    var ul = document.createElement('ul');
+    a.problems.forEach(function(t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+    box.appendChild(ul);
+    var advice = document.createElement('span');
+    if (a.suggest) {
+      advice.textContent = a.suggest === 'none' ? 'To lead into them, choose “Nothing”.' :
+        'Choose the side that’s your part: “Inside” when cutting parts out, “Outside” when cutting holes.';
+      box.appendChild(advice);
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'dk-btn dk-ghost';
+      b.textContent = 'Use ' + PROTECT_LABEL[a.suggest];
+      b.addEventListener('click', function() { protect.value = a.suggest; cfg.protect = a.suggest; save(); checkAuto(); demo(); });
+      box.appendChild(b);
+    } else {
+      advice.textContent = 'The shapes are handled; for the open paths, choose “Nothing” only if a slit past their corners is fine.';
+      box.appendChild(advice);
+    }
+  }
+
+  // ---- the animation: the real processor on a sample part, sizes exaggerated ----
+  var DEMO_PART = [[0, 0], [48, 0], [48, 22], [34, 22], [34, 30], [0, 30]];   // outline with a notch (two inside corners)
+  var DEMO_HOLE = [[9, 9], [21, 9], [21, 21], [9, 21]];                       // a hole in it
+  var DEMO_PROG = (function() {
+    function shape(pts) {
+      var l = ['G0 X' + pts[0][0] + ' Y' + pts[0][1], 'G1 Z-1 F300'];
+      for (var i = 1; i <= pts.length; i++) l.push('G1 X' + pts[i % pts.length][0] + ' Y' + pts[i % pts.length][1] + (i === 1 ? ' F1000' : ''));
+      l.push('G0 Z5');
+      return l;
+    }
+    return ['G21 G90 G17', 'G0 Z5'].concat(shape(DEMO_PART), shape(DEMO_HOLE), ['M30']).join('\n') + '\n';
+  })();
+  var NS = 'http://www.w3.org/2000/svg', demoRun = 0;
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function inPoly(p, poly) {
+    var c = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var a = poly[i], b = poly[j];
+      if ((a[1] > p.y) !== (b[1] > p.y) && p.x < (b[0] - a[0]) * (p.y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+    }
+    return c;
+  }
+  function onPath(p) {
+    function seg(poly) {
+      var best = Infinity;
+      for (var i = 0; i < poly.length; i++) {
+        var a = poly[i], b = poly[(i + 1) % poly.length], ex = b[0] - a[0], ey = b[1] - a[1];
+        var t = Math.max(0, Math.min(1, ((p.x - a[0]) * ex + (p.y - a[1]) * ey) / (ex * ex + ey * ey)));
+        best = Math.min(best, Math.hypot(a[0] + ex * t - p.x, a[1] + ey * t - p.y));
+      }
+      return best;
+    }
+    return Math.min(seg(DEMO_PART), seg(DEMO_HOLE)) < 0.35;
+  }
+  function demo() {
+    var svg = $('dk-demo-svg');
+    if (!svg) return;
+    var run = ++demoRun;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.removeAttribute('data-done');
+    var R = 1.6;
+    var set = { offset: R, swivelAngle: cfg.swivelAngle, surfaceZ: 0, rampLength: 3, liftOut: 2, leadInAngle: cfg.leadInAngle,
+      leadInLength: 6, hopHeight: 3, protect: cfg.protect, liftAngle: 0, stripSpindle: true };
+    var res;
+    try { res = DragKnife.process(DEMO_PROG, set); } catch (e) { return; }
+    var samples = DragKnife.dragTip(DragKnife.trace(res.text, 0.25), R, 0);
+    var g = el('g', { transform: 'scale(1,-1)' }, svg);
+    var d = function(poly) { return 'M' + poly.map(function(p) { return p[0] + ' ' + p[1]; }).join(' L') + ' Z'; };
+    el('path', { d: d(DEMO_PART) + ' ' + d(DEMO_HOLE), 'fill-rule': 'evenodd', fill: 'color-mix(in srgb, var(--color-accent) 16%, transparent)' }, g);
+    el('path', { d: d(DEMO_PART) + ' ' + d(DEMO_HOLE), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 0.35, 'stroke-dasharray': '1 1', opacity: 0.8 }, g);
+    var trail = el('g', {}, g);
+    var holder = el('circle', { r: R, fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 0.45 }, g);
+    var blade = el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 0.6, 'stroke-linecap': 'round' }, g);
+    var s = res.stats;
+    $('dk-demo-stats').textContent = cfg.leadInAngle > 0
+      ? 'Here: ' + plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
+      : 'Lead-ins are off (Lead in above is 0): every sharp corner swivels.';
+    // the trail, coloured by where the tip is: on the path, a slit in the waste, a slit into the part
+    function kind(p) {
+      if (onPath(p)) return 'ok';
+      var inPart = inPoly(p, DEMO_PART) && !inPoly(p, DEMO_HOLE);
+      return inPart ? 'bad' : 'waste';
+    }
+    var COLOR = { ok: 'var(--dk-accent-text)', waste: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
+    var i = 0, cur = null, curKind = null, last = null;
+    var perFrame = Math.max(2, Math.round(samples.length / 360));   // about 6 s at 60 fps
+    function frame() {
+      if (run !== demoRun || !ROOT.isConnected) return;
+      for (var k = 0; k < perFrame && i < samples.length; k++, i++) {
+        var sm = samples[i];
+        if (sm.cut) {
+          var kd = kind(sm.tip);
+          if (!cur || kd !== curKind || !last) {
+            cur = el('polyline', { fill: 'none', stroke: COLOR[kd], 'stroke-width': kd === 'ok' ? 0.7 : 0.9, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+              points: last ? last.x + ',' + last.y : '' }, trail);
+            curKind = kd;
+          }
+          cur.setAttribute('points', cur.getAttribute('points') + ' ' + sm.tip.x.toFixed(2) + ',' + sm.tip.y.toFixed(2));
+          last = sm.tip;
+        } else { cur = null; last = null; }
+      }
+      var p = samples[Math.min(i, samples.length - 1)];
+      holder.setAttribute('cx', p.x); holder.setAttribute('cy', p.y);
+      holder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
+      holder.setAttribute('stroke-dasharray', p.cut ? 'none' : '0.8 0.6');
+      if (p.tip) { blade.setAttribute('x1', p.x); blade.setAttribute('y1', p.y); blade.setAttribute('x2', p.tip.x); blade.setAttribute('y2', p.tip.y); }
+      blade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
+      if (i < samples.length) requestAnimationFrame(frame);
+      else {
+        svg.setAttribute('data-done', '1');
+        setTimeout(function() { if (run === demoRun && ROOT.isConnected) demo(); }, 4000);   // hold the finished picture, then again
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
   async function readLoaded() {
     try {
       var r = await fetch(BASE_URL + '/api/server-state');
@@ -686,11 +1016,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var up = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: newName, content: out.text }) });
       if (!up.ok) throw new Error('Couldn’t load the result (ncSender answered ' + up.status + ').');
-      var s = out.stats, warn = [];
+      var s = out.stats, warn = (s.autoProblems || []).slice();
       if (s.tightArcs) warn.push(plural(s.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (s.tightArcs === 1 ? 'it' : 'them') + '.');
       note(warn.length ? 'warn' : 'ok',
         'Loaded <span class="dk-file">' + esc(newName) + '</span>: ' + plural(s.rewritten, 'cut') + ' rewritten (' + s.closed + ' closed), ' +
-        plural(s.swivels, 'corner swivel') + (s.leadIns ? ', ' + plural(s.leadIns, 'corner lead-in') : '') + (s.lifted ? ', ' + s.lifted + ' lifted' : '') + ', program in ' + (s.units || 'mm') + '. ' +
+        plural(s.swivels, 'corner swivel') + (s.leadIns ? ', ' + plural(s.leadIns, 'corner lead-in') + (cfg.protect === 'auto' ? ' (' + (s.holes ? plural(s.holes, 'hole') : 'no holes') + ' found)' : '') : '') + (s.lifted ? ', ' + s.lifted + ' lifted' : '') + ', program in ' + (s.units || 'mm') + '. ' +
         (s.spindleRemoved ? 'Spindle start removed from ' + plural(s.spindleRemoved, 'line') + '. ' : (cfg.stripSpindle ? '' : 'Spindle commands kept: make sure the spindle can’t start. ')) +
         'Check it in the preview before you run it.' + (warn.length ? '<ul><li>' + warn.map(esc).join('</li><li>') + '</li></ul>' : ''));
       await readLoaded();
@@ -702,6 +1032,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   });
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
-  readLoaded();
+  readLoaded().then(checkAuto);
+  demo();
 })();
 </script>
