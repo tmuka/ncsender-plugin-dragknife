@@ -37,5 +37,7 @@
   and a temporary original beside it (never over a different file of the same name), so it can be processed again.
 - The dialog closes after processing (warnings show beforehand: the Auto box, and tight arcs under the top view).
 - The top view's close-up follows the knife.
+- Top and side views share one card with *Top view* / *Side view* buttons, so the one shown fills the column
+  (remembered in the browser; only the shown one animates).
 - Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
   lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.

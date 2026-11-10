@@ -38,6 +38,11 @@
   .dk-view-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; flex: none; }
   .dk-view-sub { font-size: 0.8rem; color: var(--color-text-secondary); flex: 1 1 200px; }
   .dk-view-head .dk-speed { margin: 0; }
+  .dk-tabs { display: inline-flex; border: 1px solid var(--color-border); border-radius: 9px; overflow: hidden; flex: none; }
+  .dk-tab { -webkit-appearance: none; appearance: none; border: 0 !important; background: transparent !important; color: var(--color-text-secondary) !important;
+    font: inherit; font-weight: 600; padding: 7px 16px !important; min-height: 36px; cursor: pointer; border-radius: 0 !important; }
+  .dk-tab + .dk-tab { border-left: 1px solid var(--color-border) !important; }
+  .dk-tab[aria-selected="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; }
   .dk-demo, .dk-side { flex: 1; min-height: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 8px 10px; }
   .dk-demo { display: flex; gap: 12px; }
   #dk-demo-svg { flex: 1 1 auto; min-width: 0; width: 100%; height: 100%; display: block; }
@@ -182,15 +187,19 @@
     <div class="dk-col dk-views">
       <section class="dk-card dk-view">
         <div class="dk-view-head">
-          <h3 class="dk-card-title">Top view</h3>
-          <span class="dk-view-sub" id="dk-demo-title">How these settings cut</span>
+          <div class="dk-tabs" role="tablist" aria-label="View">
+            <button type="button" class="dk-tab" role="tab" id="dk-tab-top" data-view="top" aria-selected="true" aria-controls="dk-pane-top">Top view</button>
+            <button type="button" class="dk-tab" role="tab" id="dk-tab-side" data-view="side" aria-selected="false" aria-controls="dk-pane-side">Side view</button>
+          </div>
+          <span class="dk-view-sub" id="dk-demo-title" data-for="top">How these settings cut</span>
+          <span class="dk-view-sub" data-for="side" hidden>One lead-in corner, exaggerated: the holder leads, the blade tip trails it by the offset.</span>
           <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
             <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
             <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
             <button type="button" class="dk-btn dk-ghost" data-speed="10">Fast</button>
           </div>
         </div>
-        <div class="dk-demo">
+        <div class="dk-demo" id="dk-pane-top" role="tabpanel" aria-labelledby="dk-tab-top">
           <svg id="dk-demo-svg" viewBox="0 0 10 10" role="img" aria-label="Animation: the knife cutting with these settings"></svg>
           <div class="dk-demo-aside">
             <figure class="dk-zoom" id="dk-zoom" hidden>
@@ -207,13 +216,7 @@
             </div>
           </div>
         </div>
-      </section>
-      <section class="dk-card dk-view">
-        <div class="dk-view-head">
-          <h3 class="dk-card-title">Side view</h3>
-          <span class="dk-view-sub">One lead-in corner, exaggerated: the holder leads, the blade tip trails it by the offset.</span>
-        </div>
-        <div class="dk-side">
+        <div class="dk-side" id="dk-pane-side" role="tabpanel" aria-labelledby="dk-tab-side" hidden>
           <svg id="dk-side-svg" viewBox="0 0 400 260" role="img" aria-label="Animation: a drag knife hopping and leading into a corner, seen from the side"></svg>
           <div class="dk-side-say"><b id="dk-side-phase">…</b><span id="dk-side-detail"></span></div>
         </div>
@@ -1440,6 +1443,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     return ['G21 G90 G17', 'G0 Z5'].concat(shape(DEMO_PART), shape(DEMO_HOLE), ['M30']).join('\n') + '\n';
   })();
   var NS = 'http://www.w3.org/2000/svg', demoRun = 0;
+  // One card, two views: the one shown takes the whole column; only it animates.
+  var view = 'top';
+  try { if (localStorage.getItem('dk-view') === 'side') view = 'side'; } catch (e) {}
+  function showView(v, restart) {
+    view = v;
+    try { localStorage.setItem('dk-view', v); } catch (e) {}
+    ROOT.querySelectorAll('.dk-tab').forEach(function(t) { t.setAttribute('aria-selected', String(t.getAttribute('data-view') === v)); });
+    $('dk-pane-top').hidden = v !== 'top'; $('dk-pane-side').hidden = v !== 'side';
+    ROOT.querySelectorAll('.dk-view-sub[data-for]').forEach(function(e) { e.hidden = e.getAttribute('data-for') !== v; });
+    if (restart) { if (v === 'top') demo(); else side(); }
+  }
+  ROOT.querySelectorAll('.dk-tab').forEach(function(t) { t.addEventListener('click', function() { showView(t.getAttribute('data-view'), true); }); });
   // How long one run of the animation takes (seconds): the viewer's choice, kept in this browser.
   var demoDur = 30, demoProgress = null;
   try { var savedDur = Number(localStorage.getItem('dk-demo-speed')); if ([10, 30, 60].indexOf(savedDur) >= 0) demoDur = savedDur; } catch (e) {}
@@ -1577,7 +1592,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var t0 = null;
     demoProgress = { retime: function() { if (t0 !== null) t0 = performance.now() - i / samples.length * demoDur * 1000; } };
     function frame(now) {
-      if (run !== demoRun || !ROOT.isConnected) return;
+      if (run !== demoRun || !ROOT.isConnected || view !== 'top') return;
       if (t0 === null) t0 = now;
       var upto = Math.min(samples.length, Math.max(i + 1, Math.floor((now - t0) / (demoDur * 1000) * samples.length)));
       for (; i < upto; i++) {
@@ -1708,7 +1723,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       $('dk-side-detail').textContent = detail;
     }
     function frame(now) {
-      if (run !== sideRun || !ROOT.isConnected) return;
+      if (run !== sideRun || !ROOT.isConnected || view !== 'side') return;
       if (t0 === null) t0 = now;
       var upto = Math.min(samples.length, Math.max(i + 1, Math.floor((now - t0) / dur * samples.length)));
       for (; i < upto; i++) {
@@ -1825,6 +1840,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
+  showView(view, false);
   readLoaded().then(function() { showSource(); checkAuto(); demo(); });
   side();
 })();
