@@ -4,6 +4,13 @@ Turns the loaded program into one a drag knife cuts cleanly. A drag knife's blad
 holder by a small offset, so a program written for the cut you want rounds off every corner and wanders at the start.
 This plugin rewrites the program so the tip follows the path:
 
+![A corner three ways: without the plugin the tip rounds the corner; with a swivel the holder swings around the corner
+so the tip turns in place; with a lead-in the knife hops and cuts into the corner along the next side, leaving a short
+slit in the waste](docs/images/corners.svg)
+
+*Drawn by the plugin's own processor and drag model, with a 3 mm blade offset so the motion shows.*
+
+
 - **Offset:** the spindle runs ahead of the tip by the blade offset. Lines shift forward; arcs stay arcs.
 - **Corners:** at a turn sharper than *Swivel above*, the spindle swings an arc around the corner so the tip turns
   in place, giving a sharp corner.
@@ -28,6 +35,16 @@ This plugin rewrites the program so the tip follows the path:
   corner in 3D, exaggerated.
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
+
+## The dialog
+
+![The Drag Knife dialog: knife settings on the left, and the top view of a star with a hole, showing lead-in slits
+at the star's points, swivels at its inside corners and a close-up that follows the knife](docs/images/dialog-top-view.png)
+
+The top view runs the loaded program through the processor with your settings, to scale, while you change them. The
+side view shows one lead-in corner in 3D, exaggerated:
+
+![The side view: the holder, the blade trailing it, the hop and the lead-in slit at a corner](docs/images/side-view.png)
 
 ## Processing again
 
