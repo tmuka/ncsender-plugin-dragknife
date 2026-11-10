@@ -44,7 +44,8 @@ close-up from above that follows the knife, the legend and what's happening now]
 
 The preview runs your loaded program through the processor with your settings while you change them: in 3D (X/Y to
 scale, Z stretched so hops show), with a close-up from above that follows the knife, and captions from your numbers
-(cut 2 of 3, ramp, depth, lead-in, hop). **Help**, bottom left, opens a page of pictures like the ones above, drawn by
+(cut 2 of 3, ramp, depth, lead-in, hop). Scroll or pinch to zoom where you point, drag to move, double-click to see
+it all. **Help**, bottom left, opens a page of pictures like the ones above, drawn by
 the plugin, and a guide to the settings.
 
 ## Processing again

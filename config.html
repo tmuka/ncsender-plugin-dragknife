@@ -62,7 +62,10 @@
   .dk-zoom figcaption { max-width: none; }
   .dk-legend { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.3; }
   .dk-side { display: flex; flex-direction: column; gap: 6px; }
-  #dk-side-svg { flex: 1; min-height: 0; width: 100%; height: 100%; display: block; }
+  #dk-side-svg { flex: 1; min-height: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: zoom-in; }
+  #dk-side-svg.dk-zoomed { cursor: grab; }
+  #dk-side-svg.dk-dragging { cursor: grabbing; }
+  .dk-fit { padding: 2px 12px !important; min-height: 0 !important; font-size: 0.85em; }
   /* Tall screens: the views on top, the settings scroll below. */
   @media (orientation: portrait) {
     .dk-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr); }
@@ -203,6 +206,7 @@
         <div class="dk-view-head">
           <h3 class="dk-card-title">Preview</h3>
           <span class="dk-view-sub" id="dk-side-sub"></span>
+          <button type="button" class="dk-btn dk-ghost dk-fit" id="dk-fit" hidden title="Show the whole program again (or double-click the preview)">Fit</button>
           <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
             <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
             <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
@@ -1557,6 +1561,78 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   // "Example corner": one lead-in corner with the blade offset drawn 4 units and the
   // lead-in, hop and ramp kept in proportion to it.
   var sideRun = 0;
+  // Zoom and pan, as in ncCAM's previews: the wheel zooms toward the cursor, a pinch
+  // toward the middle of the two fingers (what's under them stays put), a drag moves
+  // the view once zoomed, a double-click (or Fit) shows everything again. The view is
+  // kept as fractions of the whole picture, so it holds while the animation repeats
+  // and settings change.
+  var view3d = { base: null, user: null };   // user: [fx, fy, fw] of base (fw: width fraction, 1 = all)
+  function applyView3d() {
+    var svg = $('dk-side-svg'), b = view3d.base;
+    if (!svg || !b) return;
+    var u = view3d.user, vb = u ? [b[0] + u[0] * b[2], b[1] + u[1] * b[3], u[2] * b[2], u[2] * b[3]] : b;
+    svg.setAttribute('viewBox', vb.map(function(n) { return n.toFixed(4); }).join(' '));
+    svg.classList.toggle('dk-zoomed', !!u);
+    $('dk-fit').hidden = !u;
+  }
+  function svgPoint(svg, cx, cy) {
+    var m = svg.getScreenCTM();
+    if (!m) return null;
+    var pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+    return pt.matrixTransform(m.inverse());
+  }
+  // Scale the view by k about the picture point p (k < 1 zooms in), then shift by d.
+  function zoomView3d(p, k, dx, dy) {
+    var b = view3d.base;
+    if (!b) return;
+    var u = view3d.user || [0, 0, 1];
+    var x = b[0] + u[0] * b[2], y = b[1] + u[1] * b[3], w = u[2] * b[2], h = u[2] * b[3];
+    var nw = Math.max(b[2] / 40, Math.min(b[2], w * k)), kk = nw / w;
+    x = p.x - (p.x - x) * kk - (dx || 0); y = p.y - (p.y - y) * kk - (dy || 0);
+    var fw = nw / b[2];
+    if (fw >= 0.999) { view3d.user = null; applyView3d(); return; }
+    // keep some of the picture in view
+    var fx = Math.max(-fw * 0.5, Math.min(1 - fw * 0.5, (x - b[0]) / b[2])), fy = Math.max(-fw * 0.5, Math.min(1 - fw * 0.5, (y - b[1]) / b[3]));
+    view3d.user = [fx, fy, fw];
+    applyView3d();
+  }
+  (function wireZoom() {
+    var svg = $('dk-side-svg');
+    if (!svg) return;
+    svg.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var p = svgPoint(svg, e.clientX, e.clientY);
+      if (p) zoomView3d(p, Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)));
+    }, { passive: false });
+    var ptrs = {}, last = null;
+    function state() {
+      var ids = Object.keys(ptrs), a = ptrs[ids[0]], b = ids.length > 1 ? ptrs[ids[1]] : null;
+      return b ? { n: 2, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) } : { n: 1, x: a.x, y: a.y, d: 0 };
+    }
+    svg.addEventListener('pointerdown', function(e) {
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+      last = state();
+    });
+    svg.addEventListener('pointermove', function(e) {
+      if (!ptrs[e.pointerId]) return;
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var now = state();
+      if (last && now.n === last.n) {
+        var p0 = svgPoint(svg, last.x, last.y), p1 = svgPoint(svg, now.x, now.y);
+        if (p0 && p1) {
+          if (now.n === 2 && last.d > 0 && now.d > 0) zoomView3d(p1, last.d / now.d, p1.x - p0.x, p1.y - p0.y);
+          else if (view3d.user) { zoomView3d(p1, 1, p1.x - p0.x, p1.y - p0.y); svg.classList.add('dk-dragging'); }
+        }
+      }
+      last = now;
+    });
+    function up(e) { delete ptrs[e.pointerId]; svg.classList.remove('dk-dragging'); last = Object.keys(ptrs).length ? state() : null; }
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', up);
+    svg.addEventListener('dblclick', function() { view3d.user = null; applyView3d(); });
+    $('dk-fit').addEventListener('click', function() { view3d.user = null; applyView3d(); });
+  })();
   function lengthSay(mm) { return NU.formatMm(mm, imperial) + (imperial ? ' in' : ' mm'); }
 
   // Your program: as in the top view (the original when the loaded one is processed),
@@ -1664,7 +1740,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var xs = ext.map(function(q) { return q.x; }), ys = ext.map(function(q) { return q.y; });
     var bx0 = Math.min.apply(null, xs), bx1 = Math.max.apply(null, xs), by0 = Math.min.apply(null, ys), by1 = Math.max.apply(null, ys);
     var mg = Math.max(bx1 - bx0, by1 - by0) * 0.02;
-    svg.setAttribute('viewBox', [bx0 - mg, by0 - mg, bx1 - bx0 + 2 * mg, by1 - by0 + 2 * mg].map(function(n) { return n.toFixed(3); }).join(' '));
+    view3d.base = [bx0 - mg, by0 - mg, bx1 - bx0 + 2 * mg, by1 - by0 + 2 * mg];
+    applyView3d();
 
     var NSS = 'non-scaling-stroke';
     var front = [P(sl.x0, sl.y0, 0), P(sl.x1, sl.y0, 0), P(sl.x1, sl.y0, -T), P(sl.x0, sl.y0, -T)];
