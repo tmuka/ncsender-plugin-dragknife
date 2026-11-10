@@ -1,4 +1,8 @@
 <style>
+  /* Drag Knife owns the whole window, like QuickCut: ncSender's own title bar
+     (which would repeat "Drag Knife") is hidden while this dialog is open. */
+  .plugin-dialog-container:has(.dk-wrapper) .plugin-dialog-header { display: none !important; }
+  .plugin-dialog-content:has(.dk-wrapper) { padding: 0 !important; }
   .dk-wrapper {
     --dk-accent-text: color-mix(in srgb, var(--color-accent) 42%, var(--color-text-primary));
     --dk-danger: color-mix(in srgb, var(--color-danger, #e74c3c) 70%, var(--color-text-primary));
@@ -17,15 +21,37 @@
   .dk-loaded { flex: 1 1 220px; min-width: 0; }
   .dk-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(340px, 1fr) minmax(400px, 1.25fr); gap: 12px; }
   .dk-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
-  @media (max-width: 900px) {
+  .dk-foot { flex: none; display: flex; gap: 10px 16px; align-items: center; padding: 10px 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; }
+  .dk-foot .dk-note { flex: 1; min-width: 0; }
+  .dk-foot .dk-actions { margin-left: auto; flex: none; }
+  /* The views fill their column: each card shares the height, each drawing takes what's left. */
+  .dk-views { overflow: hidden; }
+  .dk-view { flex: 1 1 0; min-height: 0; padding: 12px 14px; gap: 8px; }
+  .dk-view-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; flex: none; }
+  .dk-view-sub { font-size: 0.8rem; color: var(--color-text-secondary); flex: 1 1 200px; }
+  .dk-view-head .dk-speed { margin: 0; }
+  .dk-demo, .dk-side { flex: 1; min-height: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 8px 10px; }
+  .dk-demo { display: flex; gap: 12px; }
+  #dk-demo-svg { flex: 1 1 auto; min-width: 0; width: 100%; height: 100%; display: block; }
+  .dk-demo-aside { flex: 0 0 210px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .dk-zoom svg { width: 120px; height: 120px; border: 1px solid var(--color-border); border-radius: 8px; display: block; margin: 0 auto; }
+  .dk-zoom figcaption { max-width: none; }
+  .dk-legend { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.3; }
+  .dk-side { display: flex; flex-direction: column; gap: 6px; }
+  #dk-side-svg { flex: 1; min-height: 0; width: 100%; height: 100%; display: block; }
+  /* Tall screens: the views on top, the settings scroll below. */
+  @media (orientation: portrait) {
+    .dk-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr); }
+    .dk-views { order: -1; }
+  }
+  /* Small screens: one long page. */
+  @media (max-width: 700px), (max-height: 600px) {
     .dk-wrapper { overflow-y: auto; }
     .dk-body { display: flex; flex-direction: column; flex: none; }
-    .dk-col { overflow: visible; }
+    .dk-col, .dk-views { overflow: visible; }
+    .dk-view { flex: none; height: 420px; }
   }
-  .dk-views .dk-demo svg#dk-demo-svg { width: min(100%, 420px); max-height: 340px; }
-  .dk-side { display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; }
-  .dk-side svg { width: 100%; max-height: 360px; height: auto; display: block; }
-  .dk-side-say { font-size: 0.85rem; color: var(--color-text-secondary); min-height: 2.8em; display: flex; flex-direction: column; gap: 2px; }
+  .dk-side-say { font-size: 0.85rem; color: var(--color-text-secondary); min-height: 2.8em; display: flex; flex-direction: column; gap: 2px; flex: none; }
   .dk-side-say b { color: var(--color-text-primary); font-weight: 600; }
   .dk-wrapper code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.9em; }
   .dk-card { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
@@ -44,8 +70,6 @@
   .dk-auto[data-state="warn"] { color: var(--dk-warn); }
   .dk-auto ul { margin: 0; padding-left: 18px; flex: 1 1 100%; }
   .dk-auto .dk-btn { min-height: 34px; padding: 4px 12px !important; }
-  .dk-demo { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; }
-  .dk-demo svg { width: 260px; max-width: 100%; height: auto; max-height: 240px; flex: none; }
   .dk-sub-check { margin-top: 14px; }
   .dk-danger-text { color: var(--dk-danger) !important; }
   .dk-wrapper [hidden] { display: none !important; }
@@ -53,10 +77,8 @@
   .dk-speed .dk-btn { padding: 2px 10px !important; min-height: 0 !important; font-size: 0.85em; }
   .dk-speed .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-zoom { margin: 0; flex: none; text-align: center; }
-  .dk-zoom svg { width: 150px; height: 150px; border: 1px solid var(--color-border); border-radius: 8px; display: block; }
   .dk-zoom figcaption { font-size: 0.8em; color: var(--color-text-secondary); margin-top: 4px; max-width: 150px; }
   .dk-off { opacity: 0.5; }
-  .dk-legend { flex: 1 1 200px; display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.35; }
   .dk-legend b { color: var(--color-text-primary); font-weight: 600; }
   .dk-key { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 2px solid currentColor; }
   .dk-input.dk-bad { border-color: var(--dk-danger); }
@@ -83,15 +105,9 @@
     <div class="dk-head-row">
       <h3 class="dk-title">Drag Knife</h3>
       <div class="dk-loaded">Loaded: <span class="dk-file" id="dk-file">…</span></div>
-      <div class="dk-actions">
-        <button type="button" class="dk-btn" id="dk-run" disabled>Process for drag knife</button>
-        <button type="button" class="dk-btn dk-ghost" id="dk-close">Close</button>
-      </div>
     </div>
-    <p class="dk-note">Rewrites the loaded program for a drag knife: the spindle runs ahead of the blade tip by the
-      blade offset, swings around each sharp corner so the tip turns in place, and ramps into each cut so the blade
-      lines up before full depth. The program should describe the cut you want, with Z0 on the top of the material.</p>
-    <div class="dk-note" id="dk-result" aria-live="polite"></div>
+    <p class="dk-note">Rewrites the loaded program for a drag knife: the spindle leads the blade tip by the blade offset,
+      swings or leads into sharp corners, and ramps into each cut. Z0 is the top of the material.</p>
   </header>
   <div class="dk-body">
     <div class="dk-col">
@@ -154,40 +170,53 @@
   </section>
     </div>
     <div class="dk-col dk-views">
-    <section class="dk-card">
-      <h3 class="dk-card-title">Top view</h3>
-    <div class="dk-demo">
-      <svg id="dk-demo-svg" viewBox="0 0 10 10" role="img" aria-label="Animation: the knife cutting with these settings"></svg>
-      <figure class="dk-zoom" id="dk-zoom" hidden>
-        <svg id="dk-zoom-svg" viewBox="0 0 10 10" role="img" aria-label="Close-up of one corner"></svg>
-        <figcaption id="dk-zoom-cap"></figcaption>
-      </figure>
-      <div class="dk-legend">
-        <div id="dk-demo-title"><b>How these settings cut</b></div>
-        <div><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>The cut you want; shaded is the part</div>
-        <div><span class="dk-key" style="color: var(--dk-accent-text)"></span>What the blade cuts</div>
-        <div><span class="dk-key" style="color: var(--dk-warn)"></span>Lead-in slit in the waste</div>
-        <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
-        <div id="dk-demo-scale">Circle: the knife holder (hollow while hopping). Drawn to scale.</div>
-        <div id="dk-demo-stats"></div>
-        <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
-          <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
-          <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
-          <button type="button" class="dk-btn dk-ghost" data-speed="10">Fast</button>
+      <section class="dk-card dk-view">
+        <div class="dk-view-head">
+          <h3 class="dk-card-title">Top view</h3>
+          <span class="dk-view-sub" id="dk-demo-title">How these settings cut</span>
+          <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
+            <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
+            <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
+            <button type="button" class="dk-btn dk-ghost" data-speed="10">Fast</button>
+          </div>
         </div>
-      </div>
-    </div>
-    </section>
-    <section class="dk-card">
-      <h3 class="dk-card-title">Side view: one lead-in corner, exaggerated</h3>
-      <div class="dk-side">
-        <svg id="dk-side-svg" viewBox="0 0 400 260" role="img" aria-label="Animation: a drag knife hopping and leading into a corner, seen from the side"></svg>
-        <div class="dk-side-say"><b id="dk-side-phase">…</b><span id="dk-side-detail"></span></div>
-      </div>
-      <div class="dk-hint">A big blade offset and deep cut so the motion shows: the holder (cylinder) leads, the blade tip trails it by the offset and swings into line during the ramp-in. Your hop height and lead-in length set the shape; the sizes are scaled up.</div>
-    </section>
+        <div class="dk-demo">
+          <svg id="dk-demo-svg" viewBox="0 0 10 10" role="img" aria-label="Animation: the knife cutting with these settings"></svg>
+          <div class="dk-demo-aside">
+            <figure class="dk-zoom" id="dk-zoom" hidden>
+              <svg id="dk-zoom-svg" viewBox="0 0 10 10" role="img" aria-label="Close-up of one corner"></svg>
+              <figcaption id="dk-zoom-cap"></figcaption>
+            </figure>
+            <div class="dk-legend">
+              <div><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>The cut you want; shaded is the part</div>
+              <div><span class="dk-key" style="color: var(--dk-accent-text)"></span>What the blade cuts</div>
+              <div><span class="dk-key" style="color: var(--dk-warn)"></span>Lead-in slit in the waste</div>
+              <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
+              <div id="dk-demo-scale">Circle: the holder, hollow while hopping.</div>
+              <div id="dk-demo-stats"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="dk-card dk-view">
+        <div class="dk-view-head">
+          <h3 class="dk-card-title">Side view</h3>
+          <span class="dk-view-sub">One lead-in corner, exaggerated: the holder leads, the blade tip trails it by the offset.</span>
+        </div>
+        <div class="dk-side">
+          <svg id="dk-side-svg" viewBox="0 0 400 260" role="img" aria-label="Animation: a drag knife hopping and leading into a corner, seen from the side"></svg>
+          <div class="dk-side-say"><b id="dk-side-phase">…</b><span id="dk-side-detail"></span></div>
+        </div>
+      </section>
     </div>
   </div>
+  <footer class="dk-foot">
+    <div class="dk-note" id="dk-result" aria-live="polite"></div>
+    <div class="dk-actions">
+      <button type="button" class="dk-btn dk-ghost" id="dk-close">Close</button>
+      <button type="button" class="dk-btn" id="dk-run" disabled>Process for drag knife</button>
+    </div>
+  </footer>
 </div>
 
 <script>
@@ -1483,8 +1512,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       knives.push(knife(zsvg, R));
       $('dk-zoom-cap').textContent = 'A corner up close, to scale (' + lengthSay(zoomW / k) + ' across)';
     }
-    $('dk-demo-title').innerHTML = '<b>' + esc(title) + '</b>';
-    $('dk-demo-scale').textContent = 'Circle: the knife holder (hollow while hopping)' + (showR > R * 1.05 ? ', drawn larger than the ' + lengthSay(cfg.offset) + ' offset so it shows.' : ', to scale.');
+    $('dk-demo-title').textContent = title;
+    $('dk-demo-scale').textContent = 'Circle: the holder, hollow while hopping' + (showR > R * 1.05 ? ' (drawn larger).' : '.');
     var s = done ? null : res.stats;
     $('dk-demo-stats').textContent = (problem ? problem + ' ' : '') + (done ? 'Load the original to see these settings on it.'
       : (cfg.leadIn ? plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
@@ -1570,20 +1599,20 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var samples = all.slice(Math.max(0, first), Math.min(all.length, last + 40));
 
     // camera: turned and tilted, looking down a little from the front left
-    var az = -32 * Math.PI / 180, el3 = 24 * Math.PI / 180, ZS = 1.6;   // ZS: Z drawn taller still
+    var az = -38 * Math.PI / 180, el3 = 24 * Math.PI / 180, ZS = 1.4;   // ZS: Z drawn taller still
     function P(x, y, z) {
       var u = x * Math.cos(az) + y * Math.sin(az), w = -x * Math.sin(az) + y * Math.cos(az);
       return { x: u, y: -(z * ZS * Math.cos(el3) + w * Math.sin(el3)) };
     }
     function pts(list) { return list.map(function(q) { return q.x.toFixed(2) + ',' + q.y.toFixed(2); }).join(' '); }
-    var E = D * 1.8, H = 11, RH = R * 0.8;   // blade showing below the holder, holder height and radius
+    var E = D * 1.8, H = 8, RH = R * 0.8;   // blade showing below the holder, holder height and radius
     var sx0 = -3, sx1 = A + 7, sy0 = -L - 5, sy1 = B + 4, T = D * 2.2;
     var slabTop = [P(sx0, sy0, 0), P(sx1, sy0, 0), P(sx1, sy1, 0), P(sx0, sy1, 0)];
     // view box: the slab and the holder at its highest
     var ext = slabTop.concat([P(sx0, sy0, -T), P(sx1, sy0, -T), P(sx1, sy1, -T)]);
-    samples.forEach(function(p, i) { if (i % 10 === 0) ext.push(P(p.x, p.y, p.z + E + H + 2)); });
-    var bx0 = Math.min.apply(null, ext.map(function(q) { return q.x; })) - 4, bx1 = Math.max.apply(null, ext.map(function(q) { return q.x; })) + 4;
-    var by0 = Math.min.apply(null, ext.map(function(q) { return q.y; })) - 4, by1 = Math.max.apply(null, ext.map(function(q) { return q.y; })) + 4;
+    samples.forEach(function(p) { ext.push(P(p.x, p.y, p.z + E + H + 0.5)); });
+    var bx0 = Math.min.apply(null, ext.map(function(q) { return q.x; })) - 1.5, bx1 = Math.max.apply(null, ext.map(function(q) { return q.x; })) + 1.5;
+    var by0 = Math.min.apply(null, ext.map(function(q) { return q.y; })) - 1.5, by1 = Math.max.apply(null, ext.map(function(q) { return q.y; })) + 1.5;
     svg.setAttribute('viewBox', [bx0, by0, bx1 - bx0, by1 - by0].map(function(n) { return n.toFixed(1); }).join(' '));
 
     var NSS = 'non-scaling-stroke';
