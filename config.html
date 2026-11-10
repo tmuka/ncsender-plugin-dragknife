@@ -88,7 +88,10 @@
   .dk-wrapper [hidden] { display: none !important; }
   .dk-speed { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
   .dk-speed .dk-btn { padding: 2px 10px !important; min-height: 0 !important; font-size: 0.85em; }
-  .dk-speed .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
+  .dk-side-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .dk-mini-tabs { display: inline-flex; gap: 6px; }
+  .dk-mini-tabs .dk-btn { padding: 2px 10px !important; min-height: 0 !important; font-size: 0.85em; }
+  .dk-mini-tabs .dk-btn[aria-pressed="true"], .dk-speed .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-zoom { margin: 0; flex: none; text-align: center; }
   .dk-zoom figcaption { font-size: 0.8em; color: var(--color-text-secondary); margin-top: 4px; max-width: 150px; }
   .dk-off { opacity: 0.5; }
@@ -192,7 +195,13 @@
             <button type="button" class="dk-tab" role="tab" id="dk-tab-side" data-view="side" aria-selected="false" aria-controls="dk-pane-side">Side view</button>
           </div>
           <span class="dk-view-sub" id="dk-demo-title" data-for="top">How these settings cut</span>
-          <span class="dk-view-sub" data-for="side" hidden>One lead-in corner, exaggerated: the holder leads, the blade tip trails it by the offset.</span>
+          <span class="dk-view-sub dk-side-head" data-for="side" hidden>
+            <span class="dk-mini-tabs" role="group" aria-label="Side view shows">
+              <button type="button" class="dk-btn dk-ghost" data-side-mode="mine">Your program</button>
+              <button type="button" class="dk-btn dk-ghost" data-side-mode="corner">Example corner</button>
+            </span>
+            <span id="dk-side-sub"></span>
+          </span>
           <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
             <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
             <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
@@ -1669,58 +1678,150 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     requestAnimationFrame(frame);
   }
 
-  // ---- the side view: one corner with a lead-in, in 3D, sizes exaggerated ----
-  // The real processor on a straight cut that turns left; the blade offset is
-  // drawn 4 units and the lead-in, hop and ramp keep their sizes relative to it.
-  var sideRun = 0;
+  // ---- the side view, in 3D: your program, or one example corner ----
+  // "Your program": the loaded program through the processor with your settings, X/Y
+  // to scale, Z stretched so depth and hops show, the knife drawn big enough to see.
+  // "Example corner": one lead-in corner with the blade offset drawn 4 units and the
+  // lead-in, hop and ramp kept in proportion to it.
+  var sideRun = 0, sideMode = 'mine';
+  try { if (localStorage.getItem('dk-side-mode') === 'corner') sideMode = 'corner'; } catch (e) {}
   function lengthSay(mm) { return NU.formatMm(mm, imperial) + (imperial ? ' in' : ' mm'); }
-  function side() {
-    var svg = $('dk-side-svg');
-    if (!svg) return;
-    var run = ++sideRun;
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-    svg.removeAttribute('data-done');
+  function sideModeShown() {
+    ROOT.querySelectorAll('[data-side-mode]').forEach(function(b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-side-mode') === sideMode)); });
+  }
+  ROOT.querySelectorAll('[data-side-mode]').forEach(function(b) {
+    b.addEventListener('click', function() {
+      sideMode = b.getAttribute('data-side-mode');
+      try { localStorage.setItem('dk-side-mode', sideMode); } catch (e) {}
+      sideModeShown(); side();
+    });
+  });
+  sideModeShown();
+
+  // The example: a straight cut that turns left at (A, 0).
+  function cornerScene() {
     var R = 4, zoom = R / Math.max(cfg.offset, 0.01);
     function clampRel(mm, lo, hi) { return Math.max(lo * R, Math.min(hi * R, mm * zoom)); }
     var D = 2.4, L = clampRel(cfg.leadInLength, 2.5, 4.5), hop = clampRel(cfg.hopHeight, 1, 2.2), ramp = clampRel(cfg.rampLength, 1.5, 3);
-    var A = 22, B = 18;   // first side along +X, then the turn: up +Y
+    var A = 22, B = 18;
     var prog = ['G21 G90 G17', 'G0 Z10', 'G0 X0 Y0', 'G1 Z-' + D + ' F300', 'G1 X' + A + ' Y0 F1000', 'G1 X' + A + ' Y' + B, 'G0 Z10', 'M30'].join('\n') + '\n';
     var set = { offset: R, swivelAngle: cfg.swivelAngle, surfaceZ: 0, rampLength: ramp, liftOut: 0, liftAngle: 0, stripSpindle: true,
       leadIn: true, leadInAngle: 45, leadInLength: L, hopHeight: hop, protect: 'none' };
-    var res; try { res = DragKnife.process(prog, set); } catch (e) { return; }
+    var res = DragKnife.process(prog, set);
     var all = DragKnife.dragTip(DragKnife.trace(res.text, 0.15), R, 0);
     var first = all.findIndex(function(p) { return p.z < hop + 2; }), last = all.length - 1;
     while (last > 0 && !all[last].cut) last--;
-    var samples = all.slice(Math.max(0, first), Math.min(all.length, last + 40));
+    var wantPts = [{ x: 0, y: 0 }, { x: A, y: 0 }, { x: A, y: B }];
+    return {
+      corner: true, samples: all.slice(Math.max(0, first), Math.min(all.length, last + 40)), surface: 0, depth: D,
+      want: [{ pts: wantPts.map(function(q) { return { x: q.x, y: q.y, z: -D }; }), closed: false }], shapes: [],
+      slab: { x0: -3, x1: A + 7, y0: -L - 5, y1: B + 4 }, ZS: 1.4, E: D * 1.8, H: 8, RH: R * 0.8, T: D * 2.2,
+      kind: function(tip, hopped) { return hopped && tip.y < -0.05 ? 'lead' : 'cut'; }, dur: demoDur * 0.6 * 1000
+    };
+  }
+  // Your program: as in the top view (the original when the loaded one is processed).
+  async function programScene() {
+    var source = await loadSource();
+    var text = source && (source.missing ? source.cur : source.text);
+    if (!text) return null;
+    var done = DragKnife.isProcessed(text), out = text, units = /G20\b/i.test(text) ? 'in' : 'mm';
+    if (!done) {
+      try { var res = DragKnife.process(text, cfg); if (!res.changed || !res.stats.rewritten) return null; out = res.text; units = res.stats.units; }
+      catch (e) { return null; }
+    }
+    var k = units === 'in' ? 1 / 25.4 : 1, R = cfg.offset * k, surface = cfg.surfaceZ;
+    var coarse = cutRuns(text, 1e9, surface), allPts = [];
+    coarse.forEach(function(r) { allPts = allPts.concat(r.pts); });
+    if (!allPts.length) return null;
+    var bb = bounds(allPts), span = Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0, 1e-3), step = span / 700;
+    var runs = cutRuns(text, step, surface);
+    var samples = DragKnife.dragTip(DragKnife.trace(out, step), R, surface);
+    if (samples.length > 30000) samples = DragKnife.dragTip(DragKnife.trace(out, step * samples.length / 30000), R, surface);
+    var first = samples.findIndex(function(p) { return p.cut; }), last = samples.length - 1;
+    while (last > 0 && !samples[last].cut) last--;
+    samples = samples.slice(Math.max(0, first - 1), last + 1);
+    // drawn relative to the material top
+    // drawn relative to the material top; travel above a few hop heights is drawn capped, so it doesn't dwarf the work
+    var hopCap = Math.max(cfg.hopHeight * k, 1e-3) * 3;
+    samples.forEach(function(p) { p.z = Math.min(p.z - surface, hopCap); });
+    runs.forEach(function(r) { r.pts.forEach(function(p) { p.z -= surface; }); });
+    var depth = Math.max(1e-3, -Math.min.apply(null, allPts.map(function(p) { return p.z - surface; })));
+    var hopZ = Math.max(cfg.hopHeight * k, depth * 0.5);   // for scaling Z
+    var ZS = span * 0.07 / Math.max(depth, hopZ);    // depth or hop stands about 7 % of the shape's size
+    var near = samples.filter(function(p) { return p.cut || p.z <= hopZ * 1.5; });
+    var sb = bounds(near.concat(allPts)), m = span * 0.06;
+    var shapes = runs.filter(function(r) { return r.closed; }).map(function(r) { return r.pts; });
+    var tol = Math.max(span / 500, R * 0.3), grid = {};
+    runs.forEach(function(r) { r.pts.forEach(function(p) { var key = Math.floor(p.x / tol) + ',' + Math.floor(p.y / tol); (grid[key] = grid[key] || []).push(p); }); });
+    function onPath(p) {
+      var cx = Math.floor(p.x / tol), cy = Math.floor(p.y / tol);
+      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
+        var list = grid[(cx + dx) + ',' + (cy + dy)];
+        if (list) for (var i = 0; i < list.length; i++) if (Math.hypot(list[i].x - p.x, list[i].y - p.y) < tol) return true;
+      }
+      return false;
+    }
+    return {
+      corner: false, samples: samples, surface: 0, depth: depth, want: runs, shapes: shapes,
+      slab: { x0: sb.x0 - m, x1: sb.x1 + m, y0: sb.y0 - m, y1: sb.y1 + m }, ZS: ZS,
+      E: depth * 1.6 + span * 0.015 / ZS, H: span * 0.16 / ZS, RH: span * 0.03, T: depth * 2.5 + span * 0.02 / ZS,
+      kind: function(tip) {
+        if (onPath(tip)) return 'cut';
+        var n = 0; shapes.forEach(function(poly) { if (inPoly(tip, poly)) n++; });
+        return n % 2 ? 'bad' : 'lead';
+      },
+      dur: demoDur * 1000, processedAlready: done
+    };
+  }
+
+  async function side() {
+    var svg = $('dk-side-svg');
+    if (!svg) return;
+    var run = ++sideRun;
+    var sc = null, fellBack = false;
+    if (sideMode === 'mine') { try { sc = await programScene(); } catch (e) { sc = null; } fellBack = !sc; }
+    if (run !== sideRun) return;
+    if (!sc) sc = cornerScene();
+    $('dk-side-sub').textContent = sc.corner
+      ? (fellBack ? 'No program to show (load one); here, one lead-in corner, exaggerated.' : 'One lead-in corner, exaggerated: the holder leads, the blade tip trails it by the offset.')
+      : 'Your program with these settings: X/Y to scale, Z stretched so depth and hops show; the knife drawn larger.';
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.removeAttribute('data-done');
+    var samples = sc.samples, ZS = sc.ZS, E = sc.E, H = sc.H, RH = sc.RH, T = sc.T, D = sc.depth;
 
     // camera: turned and tilted, looking down a little from the front left
-    var az = -38 * Math.PI / 180, el3 = 24 * Math.PI / 180, ZS = 1.4;   // ZS: Z drawn taller still
+    var az = -38 * Math.PI / 180, el3 = 24 * Math.PI / 180;
     function P(x, y, z) {
       var u = x * Math.cos(az) + y * Math.sin(az), w = -x * Math.sin(az) + y * Math.cos(az);
       return { x: u, y: -(z * ZS * Math.cos(el3) + w * Math.sin(el3)) };
     }
-    function pts(list) { return list.map(function(q) { return q.x.toFixed(2) + ',' + q.y.toFixed(2); }).join(' '); }
-    var E = D * 1.8, H = 8, RH = R * 0.8;   // blade showing below the holder, holder height and radius
-    var sx0 = -3, sx1 = A + 7, sy0 = -L - 5, sy1 = B + 4, T = D * 2.2;
-    var slabTop = [P(sx0, sy0, 0), P(sx1, sy0, 0), P(sx1, sy1, 0), P(sx0, sy1, 0)];
-    // view box: the slab and the holder at its highest
-    var ext = slabTop.concat([P(sx0, sy0, -T), P(sx1, sy0, -T), P(sx1, sy1, -T)]);
-    samples.forEach(function(p) { ext.push(P(p.x, p.y, p.z + E + H + 0.5)); });
-    var bx0 = Math.min.apply(null, ext.map(function(q) { return q.x; })) - 1.5, bx1 = Math.max.apply(null, ext.map(function(q) { return q.x; })) + 1.5;
-    var by0 = Math.min.apply(null, ext.map(function(q) { return q.y; })) - 1.5, by1 = Math.max.apply(null, ext.map(function(q) { return q.y; })) + 1.5;
-    svg.setAttribute('viewBox', [bx0, by0, bx1 - bx0, by1 - by0].map(function(n) { return n.toFixed(1); }).join(' '));
+    function pts(list) { return list.map(function(q) { return q.x.toFixed(3) + ',' + q.y.toFixed(3); }).join(' '); }
+    var sl = sc.slab;
+    var slabTop = [P(sl.x0, sl.y0, 0), P(sl.x1, sl.y0, 0), P(sl.x1, sl.y1, 0), P(sl.x0, sl.y1, 0)];
+    var ext = slabTop.concat([P(sl.x0, sl.y0, -T), P(sl.x1, sl.y0, -T), P(sl.x1, sl.y1, -T)]);
+    samples.forEach(function(p, i) { if (sc.corner || i % 5 === 0) ext.push(P(p.x, p.y, p.z + E + H)); });
+    var xs = ext.map(function(q) { return q.x; }), ys = ext.map(function(q) { return q.y; });
+    var bx0 = Math.min.apply(null, xs), bx1 = Math.max.apply(null, xs), by0 = Math.min.apply(null, ys), by1 = Math.max.apply(null, ys);
+    var mg = Math.max(bx1 - bx0, by1 - by0) * 0.02;
+    svg.setAttribute('viewBox', [bx0 - mg, by0 - mg, bx1 - bx0 + 2 * mg, by1 - by0 + 2 * mg].map(function(n) { return n.toFixed(3); }).join(' '));
 
     var NSS = 'non-scaling-stroke';
-    // the slab's front and right sides, then the blade, then the top (see-through, so the blade shows in the cut)
-    var front = [P(sx0, sy0, 0), P(sx1, sy0, 0), P(sx1, sy0, -T), P(sx0, sy0, -T)];
-    var right = [P(sx1, sy0, 0), P(sx1, sy1, 0), P(sx1, sy1, -T), P(sx1, sy0, -T)];
+    var front = [P(sl.x0, sl.y0, 0), P(sl.x1, sl.y0, 0), P(sl.x1, sl.y0, -T), P(sl.x0, sl.y0, -T)];
+    var right = [P(sl.x1, sl.y0, 0), P(sl.x1, sl.y1, 0), P(sl.x1, sl.y1, -T), P(sl.x1, sl.y0, -T)];
     el('polygon', { points: pts(front), fill: 'color-mix(in srgb, var(--color-accent) 22%, var(--color-surface))', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
     el('polygon', { points: pts(right), fill: 'color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
     var bladeG = el('g', {}, svg);
-    el('polygon', { points: pts(slabTop), fill: 'color-mix(in srgb, var(--color-accent) 30%, transparent)', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
-    // the cut you want, dashed at the cut's depth (where the tip runs) and faint on the top
-    el('polyline', { points: pts([P(0, 0, 0), P(A, 0, 0), P(A, B, 0)]), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, opacity: 0.4, 'vector-effect': NSS }, svg);
-    el('polyline', { points: pts([P(0, 0, -D), P(A, 0, -D), P(A, B, -D)]), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', 'vector-effect': NSS }, svg);
+    el('polygon', { points: pts(slabTop), fill: 'color-mix(in srgb, var(--color-accent) 18%, transparent)', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
+    // your parts, shaded on the top
+    if (sc.shapes.length) el('path', { d: sc.shapes.map(function(poly) { return 'M' + pts(poly.map(function(q) { return P(q.x, q.y, 0); })).replace(/ /g, ' L') + ' Z'; }).join(' '),
+      'fill-rule': 'evenodd', fill: 'color-mix(in srgb, var(--color-accent) 35%, transparent)', stroke: 'none' }, svg);
+    // the cut you want: faint on the top, dashed at its depth (where the tip runs)
+    sc.want.forEach(function(r) {
+      var ptsTop = r.pts.map(function(q) { return P(q.x, q.y, 0); }), ptsDeep = r.pts.map(function(q) { return P(q.x, q.y, q.z); });
+      if (r.closed) { ptsTop.push(ptsTop[0]); ptsDeep.push(ptsDeep[0]); }
+      el('polyline', { points: pts(ptsTop), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, opacity: 0.4, 'vector-effect': NSS }, svg);
+      el('polyline', { points: pts(ptsDeep), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', 'vector-effect': NSS }, svg);
+    });
     var trail = el('g', {}, svg);
     var axisTrail = el('polyline', { points: '', fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, opacity: 0.6, 'vector-effect': NSS }, svg);
     var holderG = el('g', {}, svg);
@@ -1746,15 +1847,24 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         // the blade: from under the holder's centre down to the tip, which trails by the offset
         var tri = [P(p.x, p.y, zb), P(p.x, p.y, p.z + D * 0.15), P(p.tip.x, p.tip.y, p.z)];
         el('polygon', { points: pts(tri), fill: 'color-mix(in srgb, var(--color-text-primary) 85%, var(--dk-warn))', stroke: 'var(--color-text-primary)', 'stroke-width': 1.5, 'stroke-linejoin': 'round', 'vector-effect': NSS }, bladeG);
-        el('circle', { cx: P(p.tip.x, p.tip.y, p.z).x, cy: P(p.tip.x, p.tip.y, p.z).y, r: 0.6, fill: 'var(--dk-warn)' }, bladeG);
+        var tp = P(p.tip.x, p.tip.y, p.z);
+        el('circle', { cx: tp.x, cy: tp.y, r: RH * 0.15, fill: 'var(--dk-warn)' }, bladeG);
       }
     }
-    var LOOK = { cut: 'var(--dk-accent-text)', lead: 'var(--dk-warn)' };
+    var LOOK = { cut: 'var(--dk-accent-text)', lead: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
     var hopped = false, cur = null, curKind = null, lastTip = null, axisPts = '';
-    var i = 0, t0 = null, dur = demoDur * 0.6 * 1000;
-    function say(p, prev) {
+    var i = 0, t0 = null, dur = sc.dur;
+    function say(p, prev, kd) {
       var phase, detail;
-      if (!p.cut) {
+      if (!sc.corner) {
+        if (!p.cut) {
+          if (prev && p.z < prev.z - 1e-9) { phase = 'Down to the material top'; detail = 'At the start of a cut or a lead-in.'; }
+          else if (prev && p.z > prev.z + 1e-9) { phase = 'Up out of the cut'; detail = hopped ? 'A hop at a sharp corner, or the end of a cut.' : ''; }
+          else { phase = 'In the air'; detail = 'Lifted ' + lengthSay(cfg.hopHeight) + ' for a hop, or travelling to the next cut.'; }
+        } else if (kd === 'lead') { phase = 'Lead-in'; detail = 'Cutting into a corner from behind, in the waste, so the blade is lined up when it gets there.'; }
+        else if (kd === 'bad') { phase = 'Slit into the part'; detail = 'A lead-in on the part’s side: check “Keep lead-ins off”.'; }
+        else { phase = 'Cutting'; detail = 'The tip trails the holder by the blade offset (' + lengthSay(cfg.offset) + ').'; }
+      } else if (!p.cut) {
         if (prev && p.z < prev.z - 1e-6) { phase = 'Down to the material top'; detail = 'Over the lead-in start, behind the corner on the next side extended.'; }
         else if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > 1e-6) { phase = 'Hop: back to the lead-in start'; detail = 'Lifted ' + lengthSay(cfg.hopHeight) + ' above the material while it travels.'; }
         else { phase = hopped ? 'Hop: up out of the cut' : 'Into the first side'; detail = hopped ? 'At the corner the blade points the wrong way for the next side.' : ''; }
@@ -1765,6 +1875,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       $('dk-side-phase').textContent = phase;
       $('dk-side-detail').textContent = detail;
     }
+    var stride = sc.corner ? 3 : Math.max(1, Math.round(samples.length / 3000));
     function frame(now) {
       if (run !== sideRun || !ROOT.isConnected || view !== 'side') return;
       if (t0 === null) t0 = now;
@@ -1773,7 +1884,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         var sm = samples[i];
         if (!sm.cut && i > 0 && samples[i - 1].cut) hopped = true;
         if (sm.cut && sm.tip) {
-          var kd = hopped && sm.tip.y < -0.05 ? 'lead' : 'cut';   // before the corner, on the next side extended: the slit in the waste
+          var kd = sc.kind(sm.tip, hopped);
           // the slit: its bottom where the tip is (at its depth), and a fainter line where it opens on the top
           if (!cur || kd !== curKind || !lastTip) {
             cur = { top: el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, 0)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 1.2, opacity: 0.45, 'vector-effect': NSS }, trail),
@@ -1783,12 +1894,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
           cur.top.setAttribute('points', cur.top.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, 0)]));
           cur.bottom.setAttribute('points', cur.bottom.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, sm.z)]));
           lastTip = { x: sm.tip.x, y: sm.tip.y, z: sm.z };
-        } else { cur = null; lastTip = null; }
-        if (i % 3 === 0) { axisPts += ' ' + pts([P(sm.x, sm.y, sm.z + E)]); }
+        } else { cur = null; lastTip = null; curKind = null; }
+        if (i % stride === 0) { axisPts += ' ' + pts([P(sm.x, sm.y, sm.z + E)]); }
       }
       axisTrail.setAttribute('points', axisPts);
       var p = samples[Math.min(i, samples.length - 1)];
-      draw(p); say(p, samples[Math.max(0, i - 2)]);
+      draw(p); say(p, samples[Math.max(0, i - 2)], curKind);
       if (i < samples.length) requestAnimationFrame(frame);
       else { svg.setAttribute('data-done', '1'); setTimeout(function() { if (run === sideRun && ROOT.isConnected) side(); }, 3000); }
     }

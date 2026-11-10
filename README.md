@@ -42,7 +42,7 @@ slit in the waste](docs/images/corners.svg)
 at the star's points, swivels at its inside corners and a close-up that follows the knife](docs/images/dialog-top-view.png)
 
 The top view runs the loaded program through the processor with your settings, to scale, while you change them. The
-side view shows one lead-in corner in 3D, exaggerated:
+side view shows your program in 3D (X/Y to scale, Z stretched so hops show), or one lead-in corner, exaggerated:
 
 ![The side view: the holder, the blade trailing it, the hop and the lead-in slit at a corner](docs/images/side-view.png)
 

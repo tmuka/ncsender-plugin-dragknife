@@ -37,6 +37,8 @@
   and a temporary original beside it (never over a different file of the same name), so it can be processed again.
 - The dialog closes after processing (warnings show beforehand: the Auto box, and tight arcs under the top view).
 - The top view's close-up follows the knife.
+- The side view shows your program in 3D (*Your program*: your settings, X/Y to scale, Z stretched, parts shaded,
+  slits coloured) or the exaggerated *Example corner*.
 - Top and side views share one card with *Top view* / *Side view* buttons, so the one shown fills the column
   (remembered in the browser; only the shown one animates).
 - Fixes from an independent review:
