@@ -37,8 +37,12 @@
   and a temporary original beside it (never over a different file of the same name), so it can be processed again.
 - The dialog closes after processing (warnings show beforehand: the Auto box, and tight arcs under the top view).
 - The top view's close-up follows the knife.
-- The side view shows your program in 3D (*Your program*: your settings, X/Y to scale, Z stretched, parts shaded,
-  slits coloured) or the exaggerated *Example corner*.
+- The side view shows your program in 3D with your settings (X/Y to scale, Z stretched, parts shaded, slits coloured),
+  with captions from your numbers (cut 2 of 3, ramp, depth, lead-in length, hop height); the sample part when nothing
+  is loaded.
+- A *Help* page in the dialog: the corner without the plugin, with a swivel and with a lead-in; parts and holes under
+  *Keep lead-ins off*; the depth along a closed cut; the settings and tips. Its pictures are drawn by the processor.
+- Lead-ins switched on always happen: a 0 *Lead in above* (from before the switch, or a cleared field) means 60°.
 - Top and side views share one card with *Top view* / *Side view* buttons, so the one shown fills the column
   (remembered in the browser; only the shown one animates).
 - Fixes from an independent review:

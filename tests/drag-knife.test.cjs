@@ -264,7 +264,9 @@ test('lead-ins are on by default; the switch turns them off; old saved settings 
   assert.strictEqual(DK.process(square, { offset: R, leadIn: false }).stats.leadIns, 0);
   const old = DK.readSettings({ offset: 0.25, leadInAngle: 0, leadInLength: 11.5 });
   assert.strictEqual(old.leadIn, true); assert.strictEqual(old.leadInAngle, 60); assert.strictEqual(old.leadInLength, 11.5);
-  assert.strictEqual(DK.readSettings({ leadIn: false, leadInAngle: 0 }).leadInAngle, 0);
+  assert.strictEqual(DK.readSettings({ leadIn: true, leadInAngle: 0 }).leadInAngle, 60, 'switched on with a 0 angle: the default');
+  assert.strictEqual(DK.process(square, { offset: R, leadIn: true, leadInAngle: 0 }).stats.leadIns > 0, true);
+  assert.strictEqual(DK.process(square, { offset: R, leadIn: false, leadInAngle: 0 }).stats.leadIns, 0);
 });
 
 test('a back-and-forth ramp-in (QuickCut style) is dropped, not turned into lead-ins', () => {
