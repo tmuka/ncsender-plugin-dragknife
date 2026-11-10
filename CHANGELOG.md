@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.1: Preview follows the knife
 
 - Preview: zoomed in, the view follows the knife, gliding to keep the blade tip in view (it waits a moment after you zoom or pan).
 - Preview: lead-in slits are strong amber and slits into a part red, so they stand out from the cut; they were too pale to see.
+- The plugin's description in ncSender's plugin list now matches the registry's.
 
 ## 0.1.0: First release
 
