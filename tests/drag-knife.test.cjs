@@ -313,3 +313,82 @@ test('a big program runs quickly', () => {
   assert.strictEqual(res.stats.rewritten, 2000);
   assert.ok(Date.now() - t0 < 2000, 'took ' + (Date.now() - t0) + ' ms');
 });
+
+// ---- review fixes (2026-11-10) ----
+const sqDeep = ['G0 X0 Y0', 'G1 Z-1 F200', 'G1 X10 Y0 F1000', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0'];
+function deepestNear(text, x, y, rad, r = R) {
+  const { run, drag } = require('./sim.cjs');
+  const tips = drag(run(text, 0.005), r);
+  return Math.min(...tips.filter(t => Math.hypot(t.x - x, t.y - y) < rad).map(t => t.z));
+}
+
+test('M3.0, M03.00 and M4.0 are spindle starts too', () => {
+  for (const l of ['M3.0 S1000', 'M03.00', 'M4.0', 'M3 . 0 S500']) {
+    const out = DK.process(prog([l, ...sqDeep]), cfg).text;
+    const live = out.split('\n').map(x => x.replace(/\([^)]*\)|;.*$/g, '')).filter(x => /M\s*0*[34]\b|M\s*0*[34]\s*\./i.test(x));
+    assert.deepStrictEqual(live, [], l + ' left a spindle start:\n' + out);
+  }
+});
+
+test('spindle starts come out even when no cut is rewritten', () => {
+  for (const set of [{ offset: 0 }, { offset: R, surfaceZ: -5 }]) {
+    const res = DK.process(prog(['M3 S1000', ...sqDeep]), set);
+    assert.strictEqual(res.changed, true, JSON.stringify(set));
+    assert.strictEqual(res.stats.rewritten, 0);
+    assert.ok(!/^M3 S1000$/m.test(res.text), 'M3 still live with ' + JSON.stringify(set));
+  }
+  assert.strictEqual(DK.process(prog(sqDeep), { offset: 0 }).changed, false, 'nothing to do, no spindle: unchanged');
+});
+
+test('words the rewrite would drop from a cutting move are refused', () => {
+  const at = (l) => () => DK.process(prog(['G0 X0 Y0', 'G1 Z-1 F200', 'G1 X10 Y0 F1000', l, 'G1 X0 Y10', 'G0 Z5']), cfg);
+  assert.throws(at('G55 G1 X10 Y10'), /G55 on a cutting move/);
+  assert.throws(at('G1 X10 Y10 M8'), /M on a cutting move/);
+  assert.throws(at('G93 G1 X10 Y10 F60'), /G93 on a cutting move/);
+  assert.throws(at('G90.1 G1 X10 Y10'), /G90\.1/);
+  assert.ok(DK.process(prog(['G0 X0 Y0', 'G1 Z-1 F200', 'G90 G17 G1 X10 Y0 F1000', 'G1 X10 Y10', 'G0 Z5']), cfg).changed, 'harmless words still fine');
+});
+
+test('the overcut is at full depth even when the last move ramps out', () => {
+  const t = prog(['G0 X0 Y0', 'G1 Z-1 F200', 'G1 X10 Y0 F1000', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0 Z0']);
+  const d = deepestNear(DK.process(t, cfg).text, 1, 0, 0.2);
+  assert.ok(d <= -1 + 1e-6, 'deepest near the start ' + d);
+});
+
+test('small closed shapes and short open cuts still reach full depth', () => {
+  const tiny = prog(['G0 X0 Y0', 'G1 Z-1 F200', 'G1 X0.4 Y0 F1000', 'G1 X0.4 Y0.4', 'G1 X0 Y0.4', 'G1 X0 Y0']);
+  const res = DK.process(tiny, { offset: 0.05, rampLength: 2, leadIn: false });
+  for (const [x, y] of [[0.1, 0], [0.3, 0], [0.4, 0.2]]) assert.ok(deepestNear(res.text, x, y, 0.04, 0.05) <= -1 + 1e-6, 'tiny square at ' + x + ',' + y);
+  assert.strictEqual(res.stats.shortRamps, 1);
+  const slit = DK.process(prog(['G0 X0 Y0', 'G1 Z-1 F200', 'G1 X1 Y0 F1000']), { offset: R, rampLength: 2 });
+  assert.ok(slit.text.split('\n').some(l => /^G1 X[\d.]+ Y0 Z-1\b/.test(l) || /Z-1$/.test(l)), 'reaches Z-1:\n' + slit.text);
+});
+
+test('a partly stripped line stays within 79 characters; copied comments are plain', () => {
+  const l = 'N12345 G1 X-123.4567 Y-123.4567 Z12.3456 F1234.5 S24000 M3';
+  const outL = DK.stripSpindleWords(l);
+  assert.ok(outL.length <= 79, outL.length + ': ' + outL);
+  assert.ok(!/S24000|M3\b/.test(outL.replace(/\([^)]*\)|;.*$/g, '')));
+  const t = prog(['G0 X0 Y0', 'G1 Z-1 F200', 'G1 X10 Y0 F1000 (careful! is it ok? ~ ' + 'x'.repeat(90) + ')', 'G1 X10 Y10', 'G0 Z5']);
+  for (const line of DK.process(t, cfg).text.split('\n').filter(x => x.startsWith('('))) {
+    assert.ok(line.length <= 79 && !/[!?~]/.test(line), line);
+  }
+});
+
+test('auto nesting stays quick with hundreds of shapes', () => {
+  const body = [];
+  for (let i = 0; i < 400; i++) {
+    const cx = (i % 20) * 30, cy = Math.floor(i / 20) * 30, rr = 5 + (i % 7);
+    body.push('G0 X' + (cx + rr) + ' Y' + cy, 'G1 Z-0.3 F200');
+    for (let k = 1; k <= 200; k++) { const a = 2 * Math.PI * k / 200; body.push('G1 X' + (cx + rr * Math.cos(a)).toFixed(3) + ' Y' + (cy + rr * Math.sin(a)).toFixed(3)); }
+    body.push('G0 Z5');
+  }
+  const t0 = Date.now();
+  DK.process(prog(body), { offset: R, leadIn: true, protect: 'auto' });
+  assert.ok(Date.now() - t0 < 2500, 'took ' + (Date.now() - t0) + ' ms');
+});
+
+test('results name their source', () => {
+  const out = DK.process(prog(sqDeep), cfg, { source: 'QuickCut/part (2).nc' }).text;
+  assert.strictEqual(DK.processedFrom(out), DK.sourceLabel('QuickCut/part (2).nc'));
+});

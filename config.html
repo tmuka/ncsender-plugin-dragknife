@@ -696,11 +696,15 @@ var DragKnife = (function () {
     var p = parseLine(raw);
     if (p.special || !p.words.some(function (w) { return (w.l === 'M' && (w.v === 3 || w.v === 4)) || w.l === 'S'; })) return null;
     var removed = [];
-    var code = p.code.replace(/M\s*0*[34](?![\d.])|S\s*[-+]?(?:\d+\.?\d*|\.\d+)/gi, function (m) { removed.push(m.replace(/\s+/g, '').toUpperCase()); return ' '; });
+    // M3 / M03 / M3.0 and S words (with or without spaces inside the number)
+    var code = p.code.replace(/M\s*0*[34](?:\s*\.\s*0*)?(?![\d.])|S\s*[-+]?\s*(?:\d+\.?\d*|\.\d+)/gi, function (m) { removed.push(m.replace(/\s+/g, '').toUpperCase()); return ' '; });
     code = code.replace(/\s+/g, ' ').trim();
     // The original line, commented out, says who removed it. A ';' comment runs to
     // the end of the line, so the original's own comments can stay inside it.
-    var head = code ? code + ' ; ' : '; ', tail = code ? '(Drag Knife removed ' + removed.join(' ') + ')' : '(removed by Drag Knife)';
+    var head = code ? code + ' ; ' : '; ', tail = code ? '(Drag Knife removed ' + commentText(removed.join(' ')) + ')' : '(removed by Drag Knife)';
+    // Within LINE_MAX: the quote shortens first, then the note, then only the code is left.
+    if (head.length + tail.length > LINE_MAX) tail = '(Drag Knife)';
+    if (head.length + tail.length > LINE_MAX) return code;
     var quote = commentText(raw, LINE_MAX - head.length - tail.length - 2);
     return head + (quote ? quote + '  ' : '') + tail;
   }
@@ -716,6 +720,8 @@ var DragKnife = (function () {
     return lines.map(function (l) { return '(' + VERSION_TAG + ' ' + l + ')'; });
   }
 
+  // The source a result names in its header ("from ..."), or null.
+  function processedFrom(text) { var m = /\(dragknife [^)]*\bfrom ([^,)]*)/i.exec(text); return m ? m[1].trim() : null; }
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
 
   // process(text, settings) -> { text, stats }   (throws Error('Line n: ...') on what it won't rewrite)
@@ -782,6 +788,7 @@ var DragKnife = (function () {
       var n = poly.length;
       if (n > 3000) return false; // too big to check pair by pair; assume simple
       function hit(a, b, c, d) {
+        if (Math.max(a.x, b.x) < Math.min(c.x, d.x) || Math.min(a.x, b.x) > Math.max(c.x, d.x) || Math.max(a.y, b.y) < Math.min(c.y, d.y) || Math.min(a.y, b.y) > Math.max(c.y, d.y)) return false;
         var d1 = cross(sub(b, a), sub(c, a)), d2 = cross(sub(b, a), sub(d, a)), d3 = cross(sub(d, c), sub(a, c)), d4 = cross(sub(d, c), sub(b, c));
         return d1 * d2 < -1e-12 && d3 * d4 < -1e-12;
       }
@@ -792,16 +799,26 @@ var DragKnife = (function () {
       return false;
     }
     var holes = {}, overlaps = 0, selfCrossing = 0;
+    // Bounding boxes and up to 48 sample points per shape keep this quick with
+    // hundreds of shapes (lettering): boxes that don't touch can't nest or overlap.
+    shapes.forEach(function (A) {
+      var b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+      A.poly.forEach(function (q) { b.x0 = Math.min(b.x0, q.x); b.y0 = Math.min(b.y0, q.y); b.x1 = Math.max(b.x1, q.x); b.y1 = Math.max(b.y1, q.y); });
+      A.box = b;
+      var stepS = Math.max(1, Math.floor(A.poly.length / 48));
+      A.sample = A.poly.filter(function (q, i) { return i % stepS === 0; });
+    });
     shapes.forEach(function (A) {
       var depth = 0, overlapped = false;
       if (crosses(A.poly)) selfCrossing++;
       shapes.forEach(function (B) {
         if (A === B || B.area < A.area * 1.0001 + 1e-9) return;
+        if (A.box.x1 < B.box.x0 || A.box.x0 > B.box.x1 || A.box.y1 < B.box.y0 || A.box.y0 > B.box.y1) return;
         // most of A's points inside B (a point exactly on B's edge can go either way);
         // some in and some out is an overlap
         var hits = 0;
-        for (var i = 0; i < A.poly.length; i++) if (inside(A.poly[i], B.poly)) hits++;
-        var f = hits / A.poly.length;
+        for (var i = 0; i < A.sample.length; i++) if (inside(A.sample[i], B.poly)) hits++;
+        var f = hits / A.sample.length;
         if (f > 0.5) depth++;
         if (f > 0.1 && f < 0.9) overlapped = true;
       });
@@ -816,7 +833,7 @@ var DragKnife = (function () {
     if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var st = { mm: true, abs: true, arcAbs: false, plane: 17, comp: 40, motion: 0, f: null, pos: { x: null, y: null, z: null } };
     var out = [];
-    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, rampsDropped: 0, units: null };
+    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, rampsDropped: 0, shortRamps: 0, units: null };
     var stroke = null;
     var surface = cfg.surfaceZ;
 
@@ -905,6 +922,14 @@ var DragKnife = (function () {
         if (!st.abs) fail(n, 'incremental moves (G91) while cutting aren\'t supported.');
         if (st.comp !== 40) fail(n, 'cutter compensation (G41/G42) isn\'t supported.');
         if (st.motion >= 2 && st.plane !== 17) fail(n, 'arcs outside the XY plane (G18/G19) aren\'t supported.');
+        // The rewrite writes only motion, so anything else on a cutting move would be
+        // lost: refuse it (it belongs on its own line before or after the cut).
+        var keepG = [0, 1, 2, 3, 17, 90, 94, 40, 20, 21];
+        var lostG = g.filter(function (c) { return keepG.indexOf(c) < 0; }), lostW = Object.keys(other).filter(function (k) { return k !== 'F'; });
+        if (stroke && stroke.arcAbs !== st.arcAbs) fail(n, 'G90.1 / G91.1 changes in the middle of a cut aren\'t supported.');
+        if (lostG.length || lostW.length) {
+          fail(n, (lostG.map(function (c) { return 'G' + c; }).concat(lostW)).join(' ') + ' on a cutting move isn\'t supported: put it on its own line before or after the cut.');
+        }
         if (from.x === null || from.y === null || to.x === null || to.y === null) fail(n, 'the X/Y position isn\'t known here (no X/Y move before the cut).');
         if (stats.units === null) stats.units = st.mm ? 'mm' : 'in';
         if (!stroke) {
@@ -935,7 +960,9 @@ var DragKnife = (function () {
       }
     }
     if (stroke) flush();
-    if (stats.rewritten === 0) {
+    // Nothing to rewrite: hand back the original, unless spindle starts came out:
+    // then the program without them, so the spindle can't start (never the original).
+    if (stats.rewritten === 0 && stats.spindleRemoved === 0) {
       return { text: text, stats: stats, changed: false };
     }
     var u = stats.units === 'in' ? 'in' : 'mm';
@@ -1070,11 +1097,17 @@ var DragKnife = (function () {
       }
       return 'swivel';
     }
+    // The ramp fits the path: at most 80 % of a closed shape's lap (so the first lap
+    // reaches depth and the overcut covers the ramp), half of an open cut.
+    var pathLen = elems.reduce(function (t, e) { return t + elemLen(e); }, 0);
+    var rampL = Math.min(cfg.rampLength * scale, pathLen * (closed ? 0.8 : 0.5));
+    if (cfg.rampLength * scale > rampL + 1e-9) stats.shortRamps++;
     if (closed) {
       stats.closed++;
-      // Recut the start at the depth the shape finished at.
-      var zFinal = elems[elems.length - 1].z1;
-      var overlap = prefix(elems, cfg.rampLength * scale + r);
+      // Recut the start at the shape's full depth (its deepest point: the last
+      // move may already be ramping out).
+      var zFinal = Math.min.apply(null, elems.map(function (e) { return Math.min(e.z0, e.z1); }));
+      var overlap = prefix(elems, rampL + r);
       overlap.forEach(function (o) { o.z0 = zFinal; o.z1 = zFinal; });
       elems = elems.concat(overlap);
     }
@@ -1092,8 +1125,8 @@ var DragKnife = (function () {
       }
     }
     // Ramp in from the surface, replacing the plunge below the surface.
-    var rampIn = cfg.rampLength > 0 && elems[0].z0 < surface;
-    if (rampIn) applyRamp(elems, 0, surface, cfg.rampLength * scale);
+    var rampIn = rampL > 0 && elems[0].z0 < surface;
+    if (rampIn) applyRamp(elems, 0, surface, rampL);
 
     var outL = [];
     var mode = null, feed = null;
@@ -1110,7 +1143,7 @@ var DragKnife = (function () {
 
     stats.rewritten++;
     outL.push('(dk: cut ' + stats.rewritten + ', ' + (closed ? 'closed' : 'open') + ', from line ' + (stroke.firstLine + 1) + ')');
-    for (var ci = 0; ci < stroke.comments.length; ci++) outL.push(stroke.comments[ci]);
+    for (var ci = 0; ci < stroke.comments.length; ci++) { var cm = commentText(stroke.comments[ci].replace(/^[(;]\s*|\)\s*$/g, ''), LINE_MAX - 2); if (cm) outL.push('(' + cm.replace(/[()]/g, ' ') + ')'); }
 
     var t0 = tangentAt(elems[0], 0);
     var axis = add(elems[0].from, mul(t0, r));
@@ -1180,7 +1213,7 @@ var DragKnife = (function () {
     }
     // Leave the modal state (motion mode, feed) as the original would have.
     var restore = '';
-    if (mode !== st.motion) restore += 'G' + st.motion;
+    if (mode !== st.motion && st.motion < 2) restore += 'G' + st.motion;
     if (st.f !== null && feed !== st.f) restore += (restore ? ' ' : '') + 'F' + fmt(st.f);
     if (restore) outL.push(restore);
     return outL;
@@ -1238,6 +1271,7 @@ var DragKnife = (function () {
   }
 
   return {
+    sourceLabel: function (name) { return commentText(String(name).replace(/[()]/g, ''), 50); }, processedFrom: processedFrom,
     DEFAULTS: DEFAULTS, process: process, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
     parseLine: parseLine, stripSpindleWords: stripSpindleWords, _internal: { turn: turn, tangentAt: tangentAt, elemLen: elemLen, splitAt: splitAt, sweepOf: sweepOf, centerFromR: centerFromR }
   };
@@ -1271,7 +1305,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     function commit() {
       var n, problem = null;
       if (LENGTHS[k]) { n = NU.textToMm(el.value, imperial); if (n === null) problem = NU.unitValueProblem(el.value) || 'not a length'; }
-      else n = Number(String(el.value).replace(',', '.').trim());
+      else { var tx = String(el.value).replace(',', '.').trim(); n = tx === '' ? NaN : Number(tx); }
       var bad = n === null || !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (k === 'liftFraction' && n > 100);
       el.classList.toggle('dk-bad', bad);
       if (bad) { el.setAttribute('aria-invalid', 'true'); el.title = problem || el.title; return; }
@@ -1280,8 +1314,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       if (Math.abs(v - cfg[k]) < 1e-9) return;
       cfg[k] = v;
       save();
-      if (k === 'leadInAngle' || k === 'swivelAngle' || k === 'surfaceZ') checkAuto();
-      demo(); side();
+      refresh();
     }
     el.addEventListener('focusout', commit);
     el.addEventListener('change', commit);
@@ -1306,11 +1339,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var p = BLADES[blade.value];
     if (!p) return;
     Object.keys(p).forEach(function(k) { cfg[k] = p[k]; showField(k); });
-    save(); checkAuto(); demo(); side();
+    save(); refresh();
   });
   var protect = $('dk-protect');
   protect.value = cfg.protect;
-  protect.addEventListener('change', function() { cfg.protect = protect.value; save(); checkAuto(); demo(); });
+  protect.addEventListener('change', function() { cfg.protect = protect.value; save(); refresh(); });
   var strip = $('dk-stripSpindle');
   strip.checked = !!cfg.stripSpindle;
   function spindleShown() { $('dk-spindle-warn').hidden = strip.checked; }
@@ -1330,7 +1363,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   leadIn.addEventListener('change', function() {
     cfg.leadIn = leadIn.checked;
     if (cfg.leadIn && !(cfg.leadInAngle > 0)) { cfg.leadInAngle = DragKnife.DEFAULTS.leadInAngle; $('dk-leadInAngle').value = String(cfg.leadInAngle); }
-    save(); leadInShown(); checkAuto(); demo(); side();
+    save(); leadInShown(); refresh();
   });
   function save() {
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
@@ -1388,12 +1421,22 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
   // With Auto chosen and lead-ins on, say what auto makes of the loaded program,
   // and when it can't decide, offer the manual choice instead.
+  // After a settings change: redraw once the changes stop for a moment, so a big
+  // program isn't processed again for every keystroke or arrow step.
+  var refreshTimer = null;
+  function refresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function() { checkAuto(); demo(); side(); }, 250);
+  }
+  var autoRun = 0;
   async function checkAuto() {
+    var run = ++autoRun;
     var box = $('dk-auto'), sel = $('dk-protect');
     sel.classList.remove('dk-warn');
     if (cfg.protect !== 'auto' || !cfg.leadIn || !(cfg.leadInAngle > 0)) { box.hidden = true; return; }
     var text = await loadProgramText();
     if (!text || DragKnife.isProcessed(text)) { box.hidden = true; return; }
+    if (run !== autoRun) return;   // a newer check has started
     var a;
     try { a = DragKnife.analyze(text, cfg); } catch (e) { box.hidden = true; return; }
     box.hidden = false;
@@ -1421,7 +1464,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'dk-btn dk-ghost';
       b.textContent = 'Use ' + PROTECT_LABEL[a.suggest];
-      b.addEventListener('click', function() { protect.value = a.suggest; cfg.protect = a.suggest; save(); checkAuto(); demo(); });
+      b.addEventListener('click', function() { protect.value = a.suggest; cfg.protect = a.suggest; save(); refresh(); });
       box.appendChild(b);
     } else {
       advice.textContent = 'The shapes are handled; for the open paths, choose “Nothing” only if a slit past their corners is fine.';
@@ -1786,20 +1829,19 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       if (!src || src.text === null) throw new Error(src && src.missing
         ? 'This program is already processed and its original isn’t in File Manager. Load the original (or generate it again) and process that.'
         : 'Couldn’t read the loaded program.');
-      var name = src.name;
-      var out = DragKnife.process(src.text, cfg, { source: name });
-      if (!out.changed) {
-        note('warn', 'Nothing to change: the program has no cuts below Z' + esc(cfg.surfaceZ) + ' with X/Y moves. Check “Material top Z”.');
-        return;
-      }
-      var newName = name.replace(/\.[^.\/\\]*$/, '') + '-dragknife.nc';
-      var origPath = src.path, saved = [];
+      var name = src.name, origPath = src.path, saved = [];
+      // Where a temporary original will be saved (a free name), so the result can name it.
+      if (cfg.saveToFileManager && !origPath) origPath = await freePath(SAVE_FOLDER + '/' + name, src.text);
+      var sourceId = origPath || name;
+      var out = DragKnife.process(src.text, cfg, { source: sourceId });
+      var why = !(cfg.offset > 0) ? 'the blade offset is 0' : 'the program has no cuts below Z' + cfg.surfaceZ + ' with X/Y moves (check “Material top Z”)';
+      if (!out.changed) { note('warn', 'Nothing to change: ' + esc(why) + '.'); return; }
+      var newName = (origPath ? baseName(origPath) : name).replace(/\.[^.\/\\]*$/, '') + '-dragknife.nc';
       if (cfg.saveToFileManager) {
         // the original first, when it isn't in File Manager, so it can be processed again later
-        if (!origPath) { origPath = await freePath(SAVE_FOLDER + '/' + name, src.text); if (await saveFile(origPath, src.text)) saved.push(origPath); else origPath = null; }
-        // named after the original as saved, so processing it again replaces this result
-        if (origPath) newName = baseName(origPath).replace(/\.[^.\/\\]*$/, '') + '-dragknife.nc';
-        var outPath = SAVE_FOLDER + '/' + newName;
+        if (!src.path) { if (await saveFile(origPath, src.text)) saved.push(origPath); else origPath = null; }
+        // the result replaces an earlier result from the same original, never another file
+        var outPath = await resultPath(SAVE_FOLDER + '/' + newName, sourceId);
         if (await saveFile(outPath, out.text)) saved.push(outPath);
       }
       var up = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1814,6 +1856,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         (s.spindleRemoved ? 'Spindle start removed from ' + plural(s.spindleRemoved, 'line') + '. ' : (cfg.stripSpindle ? '' : 'Spindle commands kept: make sure the spindle can’t start. ')) +
         (saved.length ? 'Saved to File Manager: ' + saved.map(esc).join(', ') + '. ' : '') +
         'Check it in the preview before you run it.' + (warn.length ? '<ul><li>' + warn.map(esc).join('</li><li>') + '</li></ul>' : ''));
+      if (s.rewritten === 0) {
+        // Only spindle starts came out: say so, and stay open.
+        note('warn', 'Loaded <span class="dk-file">' + esc(newName) + '</span> with ' + plural(s.spindleRemoved, 'spindle start') + ' removed, but no cuts were rewritten: ' + esc(why) + '.');
+        await readLoaded(); await showSource(); return;
+      }
       // Done: close, as QuickCut does after loading; the preview shows the result. Warnings
       // were shown before processing (the Auto box), and processing again shows them again.
       setTimeout(function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); }, 100);
@@ -1828,6 +1875,16 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var r = await fetch(BASE_URL + '/api/gcode-files/file/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path, content: content }) });
       return r.ok;
     } catch (e) { return false; }
+  }
+  // A path for a result: the given one if it's free or holds an earlier result from
+  // the same original; otherwise "name (2)" and so on.
+  async function resultPath(path, sourceId) {
+    var m = path.match(/^(.*?)(\.[^.\/]*)?$/), stem = m[1], ext = m[2] || '', label = DragKnife.sourceLabel(sourceId);
+    for (var n = 1; n < 50; n++) {
+      var p = n === 1 ? path : stem + ' (' + n + ')' + ext, have = await readFile(p);
+      if (have === null || DragKnife.processedFrom(have) === label) return p;
+    }
+    return stem + ' (' + Date.now() + ')' + ext;
   }
   // A path for an original that doesn't overwrite a different file of the same name.
   async function freePath(path, content) {

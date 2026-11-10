@@ -39,5 +39,17 @@
 - The top view's close-up follows the knife.
 - Top and side views share one card with *Top view* / *Side view* buttons, so the one shown fills the column
   (remembered in the browser; only the shown one animates).
+- Fixes from an independent review:
+  - spindle starts written `M3.0` / `M03.00` are removed too, and spindle starts are removed even when no cut is
+    rewritten (offset 0, nothing below *Material top Z*); the dialog says so and stays open;
+  - words a cutting move would lose (`G55`, `G93`, `G90.1`, `M8`, ...) are refused with a clear message instead of
+    being dropped;
+  - a closed shape's overcut is at its full depth even when the program ramps out on its last edge;
+  - small closed shapes and short open cuts reach full depth (the ramp fits the path);
+  - every line written stays within 79 characters; comments copied from the program are made plain;
+  - Auto's part/hole check stays quick with hundreds of shapes, and the dialog redraws once changes stop;
+  - *Save to File Manager* never overwrites a different file: a result replaces only an earlier result from the same
+    original; results name their source with its folder;
+  - an emptied angle or percentage field is refused instead of saved as 0.
 - Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
   lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.
