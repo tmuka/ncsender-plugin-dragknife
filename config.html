@@ -1520,8 +1520,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       demoDur = Number(b.getAttribute('data-speed'));
       try { localStorage.setItem('dk-demo-speed', String(demoDur)); } catch (e) {}
       speedShown();
-      if (demoProgress) demoProgress.retime();
-      side();
+      if (sideRetime) sideRetime();   // same place, new speed
     });
   });
   speedShown();
@@ -1560,7 +1559,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   // to scale, Z stretched so depth and hops show, the knife drawn big enough to see.
   // "Example corner": one lead-in corner with the blade offset drawn 4 units and the
   // lead-in, hop and ramp kept in proportion to it.
-  var sideRun = 0;
+  var sideRun = 0, sideRetime = null;
+  // The preview's pace: the knife covers this much of the program's size per second
+  // (Slow, Normal, Fast), so a big program takes longer instead of rushing.
+  var PACE = { 60: 1 / 12, 30: 1 / 6, 10: 1 / 2 };
+  function paceMs(pathLen, span) { return Math.max(8000, Math.min(900000, pathLen / (span * (PACE[demoDur] || PACE[30])) * 1000)); }
   // Zoom and pan, as in ncCAM's previews: the wheel zooms toward the cursor, a pinch
   // toward the middle of the two fingers (what's under them stays put), a drag moves
   // the view once zoomed, a double-click (or Fit) shows everything again. The view is
@@ -1690,7 +1693,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         var n = 0; shapes.forEach(function(poly) { if (inPoly(tip, poly)) n++; });
         return n % 2 ? 'bad' : 'lead';
       },
-      dur: demoDur * 1000, processedAlready: done, k: k, R: R, span: span, stats: done ? null : res.stats, units: units
+      pathLen: (function() { var L = 0; for (var q = 1; q < samples.length; q++) L += Math.hypot(samples[q].x - samples[q - 1].x, samples[q].y - samples[q - 1].y); return L; })(),
+      processedAlready: done, k: k, R: R, span: span, stats: done ? null : res.stats, units: units
     };
   }
 
@@ -1791,7 +1795,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     }
     var LOOK = { cut: 'var(--dk-accent-text)', lead: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
     var hopped = false, cur = null, curKind = null, lastTip = null, axisPts = '';
-    var i = 0, t0 = null, dur = sc.dur;
+    var i = 0, t0 = null, dur = paceMs(sc.pathLen, sc.span);
+    sideRetime = function() {
+      var nd = paceMs(sc.pathLen, sc.span);
+      if (t0 !== null) t0 = performance.now() - (i / samples.length) * nd;
+      dur = nd;
+    };
     // Captions with this program's numbers, worked out once for every sample:
     // which cut, ramping in / cutting / lifting out, lead-ins, hops and travel.
     var notes = (function() {
