@@ -30,21 +30,22 @@
   operator's units.
 - A *Blade* picker: 30° or 45° (0.25 mm offset, the default) or 60° (0.5 mm), setting the lead-in and ramp to suit.
 - Processing again: the processed program is loaded with its original's File Manager path as the source, so opening
-  Drag Knife on it offers *Process again from the original* with the current settings (the top view shows the
+  Drag Knife on it offers *Process again from the original* with the current settings (the preview shows the
   original). Processing never changes the original file; a temporary original (not in File Manager) is gone once
   processed unless saved.
 - *Save to File Manager* (top right, off by default, like QuickCut's): saves each result to File Manager › Drag Knife,
   and a temporary original beside it (never over a different file of the same name), so it can be processed again.
-- The dialog closes after processing (warnings show beforehand: the Auto box, and tight arcs under the top view).
-- The top view's close-up follows the knife.
+- The dialog closes after processing (warnings show beforehand: the Auto box, and tight arcs beside the preview).
+- The close-up follows the knife.
 - The side view shows your program in 3D with your settings (X/Y to scale, Z stretched, parts shaded, slits coloured),
   with captions from your numbers (cut 2 of 3, ramp, depth, lead-in length, hop height); the sample part when nothing
   is loaded.
-- A *Help* page in the dialog: the corner without the plugin, with a swivel and with a lead-in; parts and holes under
+- A *Help* page (button at the bottom left): the corner without the plugin, with a swivel and with a lead-in; parts and holes under
   *Keep lead-ins off*; the depth along a closed cut; the settings and tips. Its pictures are drawn by the processor.
+- Defaults for a large-format CNC drag knife: 6 mm blade offset (*Blade: Custom*), lead-in 18 mm, ramp 12 mm.
 - Lead-ins switched on always happen: a 0 *Lead in above* (from before the switch, or a cleared field) means 60°.
-- Top and side views share one card with *Top view* / *Side view* buttons, so the one shown fills the column
-  (remembered in the browser; only the shown one animates).
+- One preview: the 3D view of your program with a close-up from above that follows the knife, the legend, counts and
+  captions beside it (the separate top view is gone).
 - Fixes from an independent review:
   - spindle starts written `M3.0` / `M03.00` are removed too, and spindle starts are removed even when no cut is
     rewritten (offset 0, nothing below *Material top Z*); the dialog says so and stays open;

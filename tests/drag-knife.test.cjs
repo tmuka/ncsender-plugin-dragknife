@@ -4,7 +4,7 @@ const DK = require('../lib/drag-knife.cjs');
 const { compare, compareWithLeads } = require('./sim.cjs');
 
 const R = 0.25;
-const cfg = { offset: R, leadIn: false };   // corner swivels only; lead-in tests switch them on
+const cfg = { offset: R, leadIn: false, rampLength: 2, leadInLength: 1.5 };   // corner swivels only; lead-in tests switch them on
 const TOL = 0.02;
 
 function prog(body, units = 'G21') {
@@ -202,7 +202,7 @@ test('lead-in corners: hop, lead in along the next line, blade lined up at the c
 test('lead-in corners respect the protected side', () => {
   // anticlockwise L-shape with one concave corner at (10,10)
   const ell = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X20 Y0 F1000', 'G1 X20 Y10', 'G1 X10 Y10', 'G1 X10 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
-  const base = { offset: R, leadInAngle: 60 };
+  const base = { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
   const inside = DK.process(ell, { ...base, protect: 'inside' }).stats;
   const outside = DK.process(ell, { ...base, protect: 'outside' }).stats;
   const none = DK.process(ell, { ...base, protect: 'none' }).stats;
@@ -239,7 +239,7 @@ function sq(x0, y0, x1, y1, ccw = true) {
 const leadsPerCut = (text) => text.split('(dk: cut').slice(1).map(c => (c.match(/^G0 Z1$/gm) || []).length);
 
 test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
-  const base = { offset: R, leadInAngle: 60 };
+  const base = { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
   assert.strictEqual(DK.DEFAULTS.protect, 'auto');
   for (const holeCcw of [true, false]) {
     const t = prog([...sq(0, 0, 40, 40), ...sq(10, 10, 30, 30, holeCcw), ...sq(15, 15, 25, 25)]);
@@ -259,7 +259,7 @@ test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
 });
 
 test('lead-ins are on by default; the switch turns them off; old saved settings (angle 0) get the default', () => {
-  const on = DK.process(square, { offset: R }).stats;
+  const on = DK.process(square, { offset: R, leadInLength: 1.5, rampLength: 2 }).stats;
   assert.ok(on.leadIns > 0, 'default lead-ins: ' + on.leadIns);
   assert.strictEqual(DK.process(square, { offset: R, leadIn: false }).stats.leadIns, 0);
   const old = DK.readSettings({ offset: 0.25, leadInAngle: 0, leadInLength: 11.5 });
@@ -272,7 +272,7 @@ test('lead-ins are on by default; the switch turns them off; old saved settings 
 test('a back-and-forth ramp-in (QuickCut style) is dropped, not turned into lead-ins', () => {
   // down to Z0, zigzag 0.3 mm forward and back to depth, then a square
   const t = prog(['G0 X0 Y0', 'G1 Z0 F100', 'G1 X0.3 Y0 Z-0.15 F500', 'G1 X0 Y0 Z-0.3', 'G1 X10 Y0', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0']);
-  const res = DK.process(t, { offset: R, leadInAngle: 60, protect: 'none' });
+  const res = DK.process(t, { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2, protect: 'none' });
   assert.strictEqual(res.stats.rampsDropped, 1);
   assert.strictEqual(res.stats.leadIns, 4, 'only the square\'s corners lead in (the closing one too)');
   // without lead-ins, the tip follows the wanted path, ramp included
@@ -393,4 +393,9 @@ test('auto nesting stays quick with hundreds of shapes', () => {
 test('results name their source', () => {
   const out = DK.process(prog(sqDeep), cfg, { source: 'QuickCut/part (2).nc' }).text;
   assert.strictEqual(DK.processedFrom(out), DK.sourceLabel('QuickCut/part (2).nc'));
+});
+
+test('defaults suit a large-format CNC drag knife: 6 mm offset, lead-in 18 mm, ramp 12 mm', () => {
+  const d = DK.readSettings({});
+  assert.deepStrictEqual([d.offset, d.leadInLength, d.rampLength, d.leadIn, d.leadInAngle], [6, 18, 12, true, 60]);
 });

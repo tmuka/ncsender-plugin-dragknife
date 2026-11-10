@@ -26,7 +26,8 @@ slit in the waste](docs/images/corners.svg)
   **Auto** (the default) works it out per shape: outlines are parts, a shape inside a part is a hole, a shape inside a
   hole is a part again. The dialog says when it can't (open paths, overlapping shapes, a shape crossing itself) and
   offers the manual choice.
-- **Blade:** pick 30°/45° (0.25 mm offset) or 60° (0.5 mm), or type your holder's offset. Lengths take any unit
+- **Blade:** 6 mm offset by default (large-format CNC drag knives trail by several mm), or pick a vinyl-cutter style
+  blade, 30°/45° (0.25 mm) or 60° (0.5 mm), or type your holder's offset. Lengths take any unit
   (`1/4"`, `6mm`).
 - **Animation:** the dialog runs the loaded program (or a sample part when none is loaded) through the processor with
   the current settings and animates the knife, to scale, with a close-up that follows the knife. Slits in the waste and slits
@@ -38,13 +39,13 @@ slit in the waste](docs/images/corners.svg)
 
 ## The dialog
 
-![The Drag Knife dialog: knife settings on the left, and the top view of a star with a hole, showing lead-in slits
-at the star's points, swivels at its inside corners and a close-up that follows the knife](docs/images/dialog-top-view.png)
+![The Drag Knife dialog: knife settings on the left; on the right a 3D preview of a star with a hole being cut, with a
+close-up from above that follows the knife, the legend and what's happening now](docs/images/dialog.png)
 
-The top view runs the loaded program through the processor with your settings, to scale, while you change them. The
-side view shows your program in 3D (X/Y to scale, Z stretched so hops show), with captions from your numbers. The
-**Help** button opens a page of pictures like the ones above, drawn by the plugin, and a guide to the settings.
-
+The preview runs your loaded program through the processor with your settings while you change them: in 3D (X/Y to
+scale, Z stretched so hops show), with a close-up from above that follows the knife, and captions from your numbers
+(cut 2 of 3, ramp, depth, lead-in, hop). **Help**, bottom left, opens a page of pictures like the ones above, drawn by
+the plugin, and a guide to the settings.
 
 ## Processing again
 

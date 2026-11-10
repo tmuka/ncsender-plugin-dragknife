@@ -20,8 +20,8 @@
   .dk-title { margin: 0 !important; font-size: 1.15rem !important; font-weight: 700 !important; color: var(--color-text-primary) !important; }
   .dk-loaded { flex: 1 1 220px; min-width: 0; }
   .dk-from { font-size: 0.82rem; color: var(--color-text-secondary); margin-left: 4px; }
-  .dk-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: var(--color-text-primary); position: relative; }
-  .dk-help-btn { margin-left: auto; min-height: 34px !important; padding: 4px 14px !important; }
+  .dk-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: var(--color-text-primary); position: relative; margin-left: auto; }
+  .dk-help-btn { flex: none; }
   .dk-wrapper { position: relative; }
   .dk-help { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; }
   .dk-help-top { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--color-border); flex: none; }
@@ -54,16 +54,11 @@
   .dk-view-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; flex: none; }
   .dk-view-sub { font-size: 0.8rem; color: var(--color-text-secondary); flex: 1 1 200px; }
   .dk-view-head .dk-speed { margin: 0; }
-  .dk-tabs { display: inline-flex; border: 1px solid var(--color-border); border-radius: 9px; overflow: hidden; flex: none; }
-  .dk-tab { -webkit-appearance: none; appearance: none; border: 0 !important; background: transparent !important; color: var(--color-text-secondary) !important;
-    font: inherit; font-weight: 600; padding: 7px 16px !important; min-height: 36px; cursor: pointer; border-radius: 0 !important; }
-  .dk-tab + .dk-tab { border-left: 1px solid var(--color-border) !important; }
-  .dk-tab[aria-selected="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; }
   .dk-demo, .dk-side { flex: 1; min-height: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 8px 10px; }
   .dk-demo { display: flex; gap: 12px; }
-  #dk-demo-svg { flex: 1 1 auto; min-width: 0; width: 100%; height: 100%; display: block; }
-  .dk-demo-aside { flex: 0 0 210px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-  .dk-zoom svg { width: 120px; height: 120px; border: 1px solid var(--color-border); border-radius: 8px; display: block; margin: 0 auto; }
+  .dk-demo > .dk-side { flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent; }
+  .dk-demo-aside { flex: 0 0 230px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .dk-zoom svg { width: 200px; height: 200px; border: 1px solid var(--color-border); border-radius: 8px; display: block; margin: 0 auto; }
   .dk-zoom figcaption { max-width: none; }
   .dk-legend { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.3; }
   .dk-side { display: flex; flex-direction: column; gap: 6px; }
@@ -109,7 +104,7 @@
   .dk-mini-tabs .dk-btn { padding: 2px 10px !important; min-height: 0 !important; font-size: 0.85em; }
   .dk-mini-tabs .dk-btn[aria-pressed="true"], .dk-speed .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-zoom { margin: 0; flex: none; text-align: center; }
-  .dk-zoom figcaption { font-size: 0.8em; color: var(--color-text-secondary); margin-top: 4px; max-width: 150px; }
+  .dk-zoom figcaption { font-size: 0.8em; color: var(--color-text-secondary); margin-top: 4px; }
   .dk-off { opacity: 0.5; }
   .dk-legend b { color: var(--color-text-primary); font-weight: 600; }
   .dk-key { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 2px solid currentColor; }
@@ -137,7 +132,6 @@
     <div class="dk-head-row">
       <h3 class="dk-title">Drag Knife</h3>
       <div class="dk-loaded">Loaded: <span class="dk-file" id="dk-file">…</span><span class="dk-from" id="dk-file-from"></span></div>
-      <button type="button" class="dk-btn dk-ghost dk-help-btn" id="dk-help-open" aria-haspopup="dialog">Help</button>
       <label class="dk-switch" title="Also save each processed program to File Manager › Drag Knife, and the original too when it isn’t in File Manager already, so it can be processed again later.">
         <span>Save to File Manager</span><input type="checkbox" id="dk-saveFiles" role="switch"><span class="dk-switch-track" aria-hidden="true"></span></label>
     </div>
@@ -207,23 +201,22 @@
     <div class="dk-col dk-views">
       <section class="dk-card dk-view">
         <div class="dk-view-head">
-          <div class="dk-tabs" role="tablist" aria-label="View">
-            <button type="button" class="dk-tab" role="tab" id="dk-tab-top" data-view="top" aria-selected="true" aria-controls="dk-pane-top">Top view</button>
-            <button type="button" class="dk-tab" role="tab" id="dk-tab-side" data-view="side" aria-selected="false" aria-controls="dk-pane-side">Side view</button>
-          </div>
-          <span class="dk-view-sub" id="dk-demo-title" data-for="top">How these settings cut</span>
-          <span class="dk-view-sub" data-for="side" id="dk-side-sub" hidden></span>
+          <h3 class="dk-card-title">Preview</h3>
+          <span class="dk-view-sub" id="dk-side-sub"></span>
           <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
             <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
             <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
             <button type="button" class="dk-btn dk-ghost" data-speed="10">Fast</button>
           </div>
         </div>
-        <div class="dk-demo" id="dk-pane-top" role="tabpanel" aria-labelledby="dk-tab-top">
-          <svg id="dk-demo-svg" viewBox="0 0 10 10" role="img" aria-label="Animation: the knife cutting with these settings"></svg>
+        <div class="dk-demo" id="dk-pane-side">
+          <div class="dk-side">
+            <svg id="dk-side-svg" viewBox="0 0 400 260" role="img" aria-label="Animation: the drag knife cutting your program, in 3D"></svg>
+            <div class="dk-side-say"><b id="dk-side-phase">…</b><span id="dk-side-detail"></span></div>
+          </div>
           <div class="dk-demo-aside">
-            <figure class="dk-zoom" id="dk-zoom" hidden>
-              <svg id="dk-zoom-svg" viewBox="0 0 10 10" role="img" aria-label="Close-up of one corner"></svg>
+            <figure class="dk-zoom" id="dk-zoom">
+              <svg id="dk-zoom-svg" viewBox="0 0 10 10" role="img" aria-label="Close-up from above, following the knife"></svg>
               <figcaption id="dk-zoom-cap"></figcaption>
             </figure>
             <div class="dk-legend">
@@ -231,14 +224,11 @@
               <div><span class="dk-key" style="color: var(--dk-accent-text)"></span>What the blade cuts</div>
               <div><span class="dk-key" style="color: var(--dk-warn)"></span>Lead-in slit in the waste</div>
               <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
-              <div id="dk-demo-scale">Circle: the holder, hollow while hopping.</div>
+              <div><span class="dk-key" style="color: var(--color-text-secondary); border-top-width: 1px"></span>The holder’s path</div>
+              <div id="dk-demo-scale">The cylinder is the holder, drawn larger; in the close-up, the circle is the holder to scale, hollow while hopping.</div>
               <div id="dk-demo-stats"></div>
             </div>
           </div>
-        </div>
-        <div class="dk-side" id="dk-pane-side" role="tabpanel" aria-labelledby="dk-tab-side" hidden>
-          <svg id="dk-side-svg" viewBox="0 0 400 260" role="img" aria-label="Animation: a drag knife hopping and leading into a corner, seen from the side"></svg>
-          <div class="dk-side-say"><b id="dk-side-phase">…</b><span id="dk-side-detail"></span></div>
         </div>
       </section>
     </div>
@@ -248,6 +238,7 @@
     <div class="dk-help-body" id="dk-help-body"></div>
   </section>
   <footer class="dk-foot">
+    <button type="button" class="dk-btn dk-ghost dk-help-btn" id="dk-help-open" aria-haspopup="dialog">Help</button>
     <div class="dk-note" id="dk-result" aria-live="polite"></div>
     <div class="dk-actions">
       <button type="button" class="dk-btn dk-ghost" id="dk-close">Close</button>
@@ -575,10 +566,10 @@ var DragKnife = (function () {
 
   var VERSION_TAG = 'dragknife';
   var DEFAULTS = {
-    offset: 0.25,        // mm, blade tip behind the axis
+    offset: 6,           // mm, blade tip behind the axis (large-format CNC drag knives; vinyl-cutter blades are 0.25-0.5)
     swivelAngle: 10,     // degrees; turns sharper than this get a swivel arc
     surfaceZ: 0,         // program units; Z below this is in the material
-    rampLength: 2,       // mm; cuts start at the surface and reach depth over this
+    rampLength: 12,      // mm; cuts start at the surface and reach depth over this (about 2 offsets: the blade lines up)
     liftOut: 0.5,        // mm; closed shapes lift out over this, moving forward
     liftAngle: 0,        // degrees; 0 = off. Turns sharper than this lift during the swivel
     liftFraction: 0.5,   // how far up toward the surface the blade lifts (0..1)
@@ -586,7 +577,7 @@ var DragKnife = (function () {
     stripSpindle: true,  // remove spindle starts (M3/M4) and speeds (S): a knife must never spin
     leadIn: true,        // lead into sharp corners (below) instead of swivelling
     leadInAngle: 60,     // degrees; turns sharper than this hop up and lead back in along the next line
-    leadInLength: 1.5,   // mm; the lead-in starts this far behind the corner, on the next line extended
+    leadInLength: 18,    // mm; the lead-in starts this far behind the corner, on the next line extended (about 3 offsets)
     hopHeight: 1,        // mm above the material top while hopping to the lead-in
     saveToFileManager: false,   // the dialog: also save results (and temporary originals) to File Manager › Drag Knife
     protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
@@ -1453,7 +1444,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   var refreshTimer = null;
   function refresh() {
     clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(function() { checkAuto(); demo(); side(); }, 250);
+    refreshTimer = setTimeout(function() { checkAuto(); side(); }, 250);
   }
   var autoRun = 0;
   async function checkAuto() {
@@ -1513,18 +1504,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     return ['G21 G90 G17', 'G0 Z5'].concat(shape(DEMO_PART), shape(DEMO_HOLE), ['M30']).join('\n') + '\n';
   })();
   var NS = 'http://www.w3.org/2000/svg', demoRun = 0;
-  // One card, two views: the one shown takes the whole column; only it animates.
-  var view = 'top';
-  try { if (localStorage.getItem('dk-view') === 'side') view = 'side'; } catch (e) {}
-  function showView(v, restart) {
-    view = v;
-    try { localStorage.setItem('dk-view', v); } catch (e) {}
-    ROOT.querySelectorAll('.dk-tab').forEach(function(t) { t.setAttribute('aria-selected', String(t.getAttribute('data-view') === v)); });
-    $('dk-pane-top').hidden = v !== 'top'; $('dk-pane-side').hidden = v !== 'side';
-    ROOT.querySelectorAll('.dk-view-sub[data-for]').forEach(function(e) { e.hidden = e.getAttribute('data-for') !== v; });
-    if (restart) { if (v === 'top') demo(); else side(); }
-  }
-  ROOT.querySelectorAll('.dk-tab').forEach(function(t) { t.addEventListener('click', function() { showView(t.getAttribute('data-view'), true); }); });
+  var view = 'side';   // one view now (the 3D preview); kept so the animation loop's checks still read
   // How long one run of the animation takes (seconds): the viewer's choice, kept in this browser.
   var demoDur = 30, demoProgress = null;
   try { var savedDur = Number(localStorage.getItem('dk-demo-speed')); if ([10, 30, 60].indexOf(savedDur) >= 0) demoDur = savedDur; } catch (e) {}
@@ -1571,131 +1551,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     pts.forEach(function(p) { bb.x0 = Math.min(bb.x0, p.x); bb.y0 = Math.min(bb.y0, p.y); bb.x1 = Math.max(bb.x1, p.x); bb.y1 = Math.max(bb.y1, p.y); });
     return bb;
   }
-  async function demo() {
-    var svg = $('dk-demo-svg');
-    if (!svg) return;
-    var run = ++demoRun;
-    var source = await loadSource(), text = source && (source.missing ? source.cur : source.text), title, src = 'loaded';
-    if (run !== demoRun) return;
-    var done = false;
-    if (text && DragKnife.isProcessed(text)) { title = 'The loaded program (already processed)'; done = true; }
-    else if (text) title = source.processed ? 'The original, with these settings' : 'Your loaded program with these settings';
-    var res = null, problem = '';
-    if (text && !done) {
-      try { res = DragKnife.process(text, cfg); if (!res.changed) { problem = 'The loaded program has no cuts below Z' + cfg.surfaceZ + '.'; res = null; } }
-      catch (e) { problem = 'The loaded program can’t be processed: ' + (e.message || e); res = null; }
-    }
-    if (!text || (!res && !done)) { text = DEMO_PROG; src = 'sample'; title = 'A sample part (60 × 40 mm) with these settings'; res = DragKnife.process(text, cfg); }
-    var out = done ? text : res.text, units = done ? (/G20\b/i.test(text) ? 'in' : 'mm') : res.stats.units;
-    var k = units === 'in' ? 1 / 25.4 : 1, R = cfg.offset * k, surface = cfg.surfaceZ;
-
-    // size from the original cuts, then a step that gives a few thousand samples
-    var coarse = cutRuns(done ? out : text, 1e9, surface), all = [];
-    coarse.forEach(function(r) { all = all.concat(r.pts); });
-    if (!all.length) return;
-    var bb = bounds(all), span = Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0, 1e-3), step = span / 600;
-    var runs = cutRuns(done ? out : text, step, surface);
-    var samples = DragKnife.dragTip(DragKnife.trace(out, step), R, surface);
-    if (samples.length > 40000) samples = DragKnife.dragTip(DragKnife.trace(out, step * samples.length / 40000), R, surface);
-    // show from the first cut to the last, and what the knife does near the work (hops, lead-ins)
-    var first = samples.findIndex(function(p) { return p.cut; }), last = samples.length - 1;
-    while (last > 0 && !samples[last].cut) last--;
-    samples = samples.slice(Math.max(0, first - 1), last + 1);
-    var near = samples.filter(function(p) { return p.cut || p.z <= surface + (cfg.hopHeight + 0.5) * k; });
-    var sb = bounds(near.concat(all)), pad = Math.max(sb.x1 - sb.x0, sb.y1 - sb.y0) * 0.06 + R * 2;
-    var vw = sb.x1 - sb.x0 + 2 * pad, vh = sb.y1 - sb.y0 + 2 * pad;
-    var zsvg = $('dk-zoom-svg');
-    [svg, zsvg].forEach(function(e) { while (e.firstChild) e.removeChild(e.firstChild); });
-    svg.removeAttribute('data-done');
-    svg.setAttribute('viewBox', [sb.x0 - pad, -(sb.y1 + pad), vw, vh].map(function(n) { return n.toFixed(4); }).join(' '));
-    var u = Math.max(vw, vh) / 260;   // one screen pixel in the full view, roughly
-    // Strokes keep their screen width (non-scaling), so the close-up can show the same scene.
-    var NSS = 'non-scaling-stroke';
-    var g = el('g', { id: 'dk-demo-scene', transform: 'scale(1,-1)' }, svg);
-    var shapes = runs.filter(function(r) { return r.closed; }).map(function(r) { return r.pts; });
-    var path = function(pts, close) { return 'M' + pts.map(function(p) { return p.x.toFixed(4) + ' ' + p.y.toFixed(4); }).join(' L') + (close ? ' Z' : ''); };
-    if (shapes.length) el('path', { d: shapes.map(function(p) { return path(p, true); }).join(' '), 'fill-rule': 'evenodd', fill: 'color-mix(in srgb, var(--color-accent) 16%, transparent)' }, g);
-    el('path', { d: runs.map(function(r) { return path(r.pts, r.closed); }).join(' '), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '3 3', 'vector-effect': NSS, opacity: 0.8 }, g);
-    var trail = el('g', {}, g);
-    var showR = Math.max(R, 4 * u);
-    function knife(parent, rr) {
-      var kg = el('g', { transform: 'scale(1,-1)' }, parent);
-      return { r: rr, holder: el('circle', { r: rr, fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 1.3, 'vector-effect': NSS }, kg),
-        blade: el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'vector-effect': NSS }, kg) };
-    }
-    var knives = [knife(svg, showR)];
-    // The close-up follows the knife, to scale: wide enough to show a lead-in and its hop.
-    var zoomW = Math.max(2.6 * cfg.leadInLength * k, 14 * R);
-    function zoomTo(p) { zsvg.setAttribute('viewBox', [p.x - zoomW / 2, -(p.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' ')); }
-    $('dk-zoom').hidden = false;
-    zoomTo(samples[0]);
-    el('use', { href: '#dk-demo-scene' }, zsvg);
-    knives.push(knife(zsvg, R));
-    $('dk-zoom-cap').textContent = 'Following the knife, to scale (' + lengthSay(zoomW / k) + ' across)';
-    $('dk-demo-title').textContent = title;
-    $('dk-demo-scale').textContent = 'Circle: the holder, hollow while hopping' + (showR > R * 1.05 ? ' (drawn larger).' : '.');
-    var s = done ? null : res.stats;
-    $('dk-demo-stats').textContent = (problem ? problem + ' ' : '') + (done ? 'Load the original to see these settings on it.'
-      : (cfg.leadIn ? plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
-        : 'Lead-ins are off: ' + plural(s.swivels, 'swivel') + '.')) +
-      (s && s.tightArcs ? ' ' + plural(s.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (s.tightArcs === 1 ? 'it.' : 'them.') : '');
-
-    // the trail, coloured by where the tip is: on the wanted cut, a slit in the waste, a slit into the part
-    var tol = Math.max(span / 400, R * 0.3), cell = tol, grid = {};
-    runs.forEach(function(r) { r.pts.forEach(function(p) { var key = Math.floor(p.x / cell) + ',' + Math.floor(p.y / cell); (grid[key] = grid[key] || []).push(p); }); });
-    function onPath(p) {
-      var cx = Math.floor(p.x / cell), cy = Math.floor(p.y / cell);
-      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
-        var list = grid[(cx + dx) + ',' + (cy + dy)];
-        if (list) for (var i = 0; i < list.length; i++) if (Math.hypot(list[i].x - p.x, list[i].y - p.y) < tol) return true;
-      }
-      return false;
-    }
-    function kind(p) {
-      if (onPath(p)) return 'ok';
-      var n = 0; shapes.forEach(function(poly) { if (inPoly(p, poly)) n++; });
-      return n % 2 ? 'bad' : 'waste';
-    }
-    var COLOR = { ok: 'var(--dk-accent-text)', waste: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
-    var i = 0, cur = null, curKind = null, lastTip = null;
-    // Time-based, so it runs at the same speed on any display: the whole run takes demoDur seconds.
-    var t0 = null;
-    demoProgress = { retime: function() { if (t0 !== null) t0 = performance.now() - i / samples.length * demoDur * 1000; } };
-    function frame(now) {
-      if (run !== demoRun || !ROOT.isConnected || view !== 'top') return;
-      if (t0 === null) t0 = now;
-      var upto = Math.min(samples.length, Math.max(i + 1, Math.floor((now - t0) / (demoDur * 1000) * samples.length)));
-      for (; i < upto; i++) {
-        var sm = samples[i];
-        if (sm.cut) {
-          var kd = kind(sm.tip);
-          if (!cur || kd !== curKind || !lastTip) {
-            cur = el('polyline', { fill: 'none', stroke: COLOR[kd], 'stroke-width': kd === 'ok' ? 1.6 : 2.2, 'vector-effect': NSS, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-              points: lastTip ? lastTip.x.toFixed(4) + ',' + lastTip.y.toFixed(4) : '' }, trail);
-            curKind = kd;
-          }
-          cur.setAttribute('points', cur.getAttribute('points') + ' ' + sm.tip.x.toFixed(4) + ',' + sm.tip.y.toFixed(4));
-          lastTip = sm.tip;
-        } else { cur = null; lastTip = null; }
-      }
-      var p = samples[Math.min(i, samples.length - 1)];
-      zoomTo(p);
-      knives.forEach(function(kn) {
-        kn.holder.setAttribute('cx', p.x); kn.holder.setAttribute('cy', p.y);
-        kn.holder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
-        kn.holder.setAttribute('stroke-dasharray', p.cut ? 'none' : '2 1.5');
-        if (p.tip) { kn.blade.setAttribute('x1', p.x); kn.blade.setAttribute('y1', p.y); kn.blade.setAttribute('x2', p.tip.x); kn.blade.setAttribute('y2', p.tip.y); }
-        kn.blade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
-      });
-      if (i < samples.length) requestAnimationFrame(frame);
-      else {
-        svg.setAttribute('data-done', '1');
-        setTimeout(function() { if (run === demoRun && ROOT.isConnected) demo(); }, 4000);   // hold the finished picture, then again
-      }
-    }
-    requestAnimationFrame(frame);
-  }
-
   // ---- the side view, in 3D: your program, or one example corner ----
   // "Your program": the loaded program through the processor with your settings, X/Y
   // to scale, Z stretched so depth and hops show, the knife drawn big enough to see.
@@ -1759,7 +1614,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         var n = 0; shapes.forEach(function(poly) { if (inPoly(tip, poly)) n++; });
         return n % 2 ? 'bad' : 'lead';
       },
-      dur: demoDur * 1000, processedAlready: done, k: k
+      dur: demoDur * 1000, processedAlready: done, k: k, R: R, span: span, stats: done ? null : res.stats, units: units
     };
   }
 
@@ -1774,10 +1629,29 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       ' with these settings: X/Y to scale, Z stretched so depth and hops show; the knife drawn larger.';
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     svg.removeAttribute('data-done');
+    var st = sc.stats;
+    $('dk-demo-stats').textContent = sc.processedAlready ? 'The loaded program is already processed: load the original to see these settings on it.'
+      : (cfg.leadIn ? plural(st.leadIns, 'lead-in') + ', ' + plural(st.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(st.holes, 'hole') + ' found' : '') + '.'
+        : 'Lead-ins are off: ' + plural(st.swivels, 'swivel') + '.') +
+      (st.tightArcs ? ' ' + plural(st.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (st.tightArcs === 1 ? 'it.' : 'them.') : '');
+    // The close-up: from above, to scale, following the knife.
+    var zsvg = $('dk-zoom-svg');
+    while (zsvg.firstChild) zsvg.removeChild(zsvg.firstChild);
+    var zk = sc.k || 1, zR = sc.R, zoomW = Math.min(Math.max(2.6 * cfg.leadInLength * zk, 14 * zR), sc.span * 0.45);
+    function zoomTo(p) { zsvg.setAttribute('viewBox', [p.x - zoomW / 2, -(p.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' ')); }
+    var zg = el('g', { transform: 'scale(1,-1)' }, zsvg);
+    if (sc.shapes.length) el('path', { d: sc.shapes.map(function(poly) { return 'M' + poly.map(function(q) { return q.x.toFixed(4) + ' ' + q.y.toFixed(4); }).join(' L') + ' Z'; }).join(' '),
+      'fill-rule': 'evenodd', fill: 'color-mix(in srgb, var(--color-accent) 16%, transparent)' }, zg);
+    sc.want.forEach(function(r) { el('polyline', { points: r.pts.map(function(q) { return q.x.toFixed(4) + ',' + q.y.toFixed(4); }).join(' ') + (r.closed ? ' ' + r.pts[0].x.toFixed(4) + ',' + r.pts[0].y.toFixed(4) : ''),
+      fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '3 3', 'vector-effect': 'non-scaling-stroke' }, zg); });
+    var zTrail = el('g', {}, zg);
+    var zHolder = el('circle', { r: zR, fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 1.3, 'vector-effect': 'non-scaling-stroke' }, zg);
+    var zBlade = el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }, zg);
+    $('dk-zoom-cap').textContent = 'From above, following the knife, to scale (' + lengthSay(Math.round(zoomW / zk * 10) / 10) + ' across)';
     var samples = sc.samples, ZS = sc.ZS, E = sc.E, H = sc.H, RH = sc.RH, T = sc.T, D = sc.depth;
 
     // camera: turned and tilted, looking down a little from the front left
-    var az = -38 * Math.PI / 180, el3 = 24 * Math.PI / 180;
+    var az = -38 * Math.PI / 180, el3 = 34 * Math.PI / 180;
     function P(x, y, z) {
       var u = x * Math.cos(az) + y * Math.sin(az), w = -x * Math.sin(az) + y * Math.cos(az);
       return { x: u, y: -(z * ZS * Math.cos(el3) + w * Math.sin(el3)) };
@@ -1856,8 +1730,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         if (!on && start >= 0) { runs.push([start, q - 1]); start = -1; }
       }
       var cutOf = new Array(n), cuts = 0, leads = 0, leadOf = new Array(n);
-      runs.forEach(function(r) {
-        var isLead = kinds[r[0]] === 'lead' || kinds[r[0]] === 'bad';
+      var hopZ = cfg.hopHeight * k;
+      runs.forEach(function(r, ri) {
+        // reached by a hop (the air before it at hop height) rather than by travel to a new cut
+        var airTop = -Infinity, from = ri ? runs[ri - 1][1] + 1 : 0;
+        for (var a = from; a < r[0]; a++) airTop = Math.max(airTop, samples[a].z);
+        var isLead = ri > 0 && Math.abs(airTop - hopZ) <= Math.max(1e-4, hopZ * 0.02);
         if (!isLead || !cuts) cuts++;
         if (isLead) leads++;
         var zMin = Infinity;
@@ -1917,10 +1795,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
           var kd = sc.kind(sm.tip, hopped);
           // the slit: its bottom where the tip is (at its depth), and a fainter line where it opens on the top
           if (!cur || kd !== curKind || !lastTip) {
-            cur = { top: el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, 0)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 1.2, opacity: 0.45, 'vector-effect': NSS }, trail),
+            cur = { flat: el('polyline', { points: lastTip ? lastTip.x.toFixed(4) + ',' + lastTip.y.toFixed(4) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': kd === 'cut' ? 1.6 : 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': NSS }, zTrail),
+              top: el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, 0)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 1.2, opacity: 0.45, 'vector-effect': NSS }, trail),
               bottom: el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, lastTip.z)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 2.2, 'stroke-linecap': 'round', 'vector-effect': NSS }, trail) };
             curKind = kd;
           }
+          cur.flat.setAttribute('points', cur.flat.getAttribute('points') + ' ' + sm.tip.x.toFixed(4) + ',' + sm.tip.y.toFixed(4));
           cur.top.setAttribute('points', cur.top.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, 0)]));
           cur.bottom.setAttribute('points', cur.bottom.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, sm.z)]));
           lastTip = { x: sm.tip.x, y: sm.tip.y, z: sm.z };
@@ -1930,6 +1810,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       axisTrail.setAttribute('points', axisPts);
       var p = samples[Math.min(i, samples.length - 1)];
       draw(p); say(Math.min(i, samples.length - 1));
+      zoomTo(p);
+      zHolder.setAttribute('cx', p.x); zHolder.setAttribute('cy', p.y);
+      zHolder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
+      zHolder.setAttribute('stroke-dasharray', p.cut ? 'none' : '2 1.5');
+      if (p.tip) { zBlade.setAttribute('x1', p.x); zBlade.setAttribute('y1', p.y); zBlade.setAttribute('x2', p.tip.x); zBlade.setAttribute('y2', p.tip.y); }
+      zBlade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
       if (i < samples.length) requestAnimationFrame(frame);
       else { svg.setAttribute('data-done', '1'); setTimeout(function() { if (run === sideRun && ROOT.isConnected) side(); }, 3000); }
     }
@@ -2023,11 +1909,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '<h4>Into and out of each cut</h4><p>The blade can’t turn while it’s buried, so each cut starts at the material top and ramps down along the path (<i>Ramp in over</i>), lining up while shallow. A closed shape then recuts its start at full depth (the overcut) and rises while still moving (<i>Lift out over</i>), so it drops out cleanly.</p><div class="dk-figs">' +
       fig('Depth along one closed square', helpProfile(), 'Ramp in, the cut at depth, the overcut past the start, and the lift out.', true) + '</div>' +
       '<h4>Settings</h4><ul>' +
-      '<li><b>Blade / Blade offset:</b> how far the tip trails the holder. About 0.25 mm for 30° and 45° blades, 0.5 mm for 60°. Too small and corners round off; too big and they get a hook.</li>' +
+      '<li><b>Blade / Blade offset:</b> how far the tip trails the holder. Large-format CNC drag knives trail by several mm (6 mm by default); vinyl-cutter style blades about 0.25 mm (30° and 45°) or 0.5 mm (60°). Too small and corners round off; too big and they get a hook.</li>' +
       '<li><b>Swivel above:</b> turns sharper than this get a swivel. Gentler bends just drag.</li>' +
       '<li><b>Material top Z:</b> moves below this are cuts. 0 when Z0 is the top of the material.</li>' +
       '<li><b>Remove spindle starts:</b> M3, M4 and S come out (commented, so you can see them). A drag knife must never spin.</li>' +
-      '<li><b>Lead into sharp corners:</b> on by default for turns over 60°. A lead-in about 6 offsets long works well.</li>' +
+      '<li><b>Lead into sharp corners:</b> on by default for turns over 60°. The blade needs to travel about 2 to 3 offsets to swing into line, so make the lead-in about 3 offsets long (18 mm for 6 mm) and the ramp about 2.</li>' +
       '<li><b>Lift at sharp corners:</b> for thick material, the blade rises partway while it swivels.</li>' +
       '<li><b>Save to File Manager:</b> keeps each result, and the original when it isn’t saved already, so it can be processed again later.</li></ul>' +
       '<h4>Tips</h4><ul>' +
@@ -2141,7 +2027,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
-  showView(view, false);
-  readLoaded().then(function() { showSource(); checkAuto(); demo(); side(); });
+  readLoaded().then(function() { showSource(); checkAuto(); side(); });
 })();
 </script>
