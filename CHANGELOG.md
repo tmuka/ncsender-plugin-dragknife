@@ -44,6 +44,8 @@
   *Keep lead-ins off*; the depth along a closed cut; the settings and tips. Its pictures are drawn by the processor.
 - Defaults for a large-format CNC drag knife: 6 mm blade offset (*Blade: Custom*), lead-in 18 mm, ramp 12 mm.
 - Lead-ins switched on always happen: a 0 *Lead in above* (from before the switch, or a cleared field) means 60°.
+- Closed shapes entered by a ramp along their own path (as in programs made with ncCAM from an SVG) are recognised as closed: the
+  ramp is replaced by Drag Knife's own, and they get the overcut, lift-out and Auto's lead-ins.
 - The preview is paced by distance: the knife covers about a sixth of the program's size a second on *Normal* (a twelfth
   on *Slow*, half on *Fast*), so big programs no longer rush by; changing speed keeps its place.
 - The preview zooms like ncCAM's: the wheel toward the cursor, a pinch toward the fingers; drag to move when zoomed,

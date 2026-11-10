@@ -37,6 +37,14 @@ slit in the waste](docs/images/corners.svg)
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 
+## Works well with
+
+- **[QuickCut](https://github.com/siganberg/ncsender-plugin-quickcut)** for shapes: rectangles, circles, stars and more.
+  Cut them *on the line* (or with a 0 bit diameter), load, and process. Drag Knife replaces QuickCut's back-and-forth
+  ramp with its own.
+- **ncCut2D** for simple drag knife cutting of SVG and DXF files: outlines and holes become closed shapes, and Auto
+  keeps the lead-ins off the parts.
+
 ## The dialog
 
 ![The Drag Knife dialog: knife settings on the left; on the right a 3D preview of a star with a hole being cut, with a

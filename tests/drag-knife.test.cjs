@@ -399,3 +399,17 @@ test('defaults suit a large-format CNC drag knife: 6 mm offset, lead-in 18 mm, r
   const d = DK.readSettings({});
   assert.deepStrictEqual([d.offset, d.leadInLength, d.rampLength, d.leadIn, d.leadInAngle], [6, 18, 12, true, 60]);
 });
+
+test('a closed shape entered by a ramp along its own path (ncCAM) is closed, not open', () => {
+  // start 3 mm before the corner on the last edge, ramp down to it, go round, end at the corner
+  const t = prog(['G0 X0 Y3', 'G0 Z1', 'G1 Z0 F100', 'G1 X0 Y0 Z-0.3 F500', 'G1 X10 Y0', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0']);
+  const res = DK.process(t, cfg);
+  assert.strictEqual(res.stats.closed, 1);
+  assert.strictEqual(res.stats.rampsDropped, 1);
+  const c = compare(t, res.text, R, { corners: [{ x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] });
+  assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
+  for (const d of c.corners) assert.ok(d < TOL, 'corner ' + d);
+  assert.ok(deepestNear(res.text, 1, 0, 0.2) <= -0.3 + 1e-6, 'start recut at full depth');
+  // an open path that happens to end near its start is left open
+  assert.strictEqual(DK.process(prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 Y0 F1000', 'G1 X10 Y10', 'G1 X0.5 Y0.2']), cfg).stats.closed, 0);
+});
