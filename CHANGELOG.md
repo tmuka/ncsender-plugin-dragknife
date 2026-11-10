@@ -16,7 +16,7 @@
   "removed by Drag Knife"; M5 stays.
 - Lead-ins have an on/off switch and are **on** by default (above 60°). Settings saved while they were off by a 0
   angle get the new default.
-- The animation uses the loaded program and every current setting, to scale, with a close-up of one corner; a sample
+- The animation uses the loaded program and every current setting, to scale, with a close-up that follows the knife; a sample
   part when nothing is loaded.
 - A back-and-forth ramp-in at the start of a cut (QuickCut's) is dropped, so its reversals no longer become lead-ins.
 - The animation is time-based (same speed on any display) with Slow / Normal / Fast (10, 30, 60 s a run; Normal by
@@ -35,6 +35,7 @@
   processed unless saved.
 - *Save to File Manager* (top right, off by default, like QuickCut's): saves each result to File Manager › Drag Knife,
   and a temporary original beside it (never over a different file of the same name), so it can be processed again.
-- The dialog closes after processing when there's nothing to warn about.
+- The dialog closes after processing (warnings show beforehand: the Auto box, and tight arcs under the top view).
+- The top view's close-up follows the knife.
 - Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
   lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.

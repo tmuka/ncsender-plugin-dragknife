@@ -1539,37 +1539,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         blade: el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'vector-effect': NSS }, kg) };
     }
     var knives = [knife(svg, showR)];
-    // The close-up: one corner the settings act on, to scale. A lead-in corner if
-    // there is one (where the knife first hops), else the first sharp corner.
-    var zoomAt = null, zoomW = Math.max(2.6 * cfg.leadInLength * k, 14 * R);
-    var corners = [];
-    coarse.forEach(function(rn) {
-      var p = rn.pts;
-      for (var ci = 1; ci < p.length - 1; ci++) {
-        var a1 = Math.atan2(p[ci].y - p[ci - 1].y, p[ci].x - p[ci - 1].x), a2 = Math.atan2(p[ci + 1].y - p[ci].y, p[ci + 1].x - p[ci].x);
-        var t = Math.abs(Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1))) * 180 / Math.PI;
-        if (t > cfg.swivelAngle && Math.hypot(p[ci + 1].x - p[ci].x, p[ci + 1].y - p[ci].y) > R) corners.push(p[ci]);
-      }
-    });
-    var hop = null;
-    for (var hi = 1; hi < samples.length && !hop; hi++) if (samples[hi - 1].cut && !samples[hi].cut && samples.slice(hi).some(function(q) { return q.cut; })) hop = samples[hi];
-    if (corners.length) {
-      zoomAt = corners[0];
-      if (hop && !done && res.stats.leadIns) corners.forEach(function(c) { if (Math.hypot(c.x - hop.x, c.y - hop.y) < Math.hypot(zoomAt.x - hop.x, zoomAt.y - hop.y)) zoomAt = c; });
-    }
-    $('dk-zoom').hidden = !zoomAt;
-    if (zoomAt) {
-      zsvg.setAttribute('viewBox', [zoomAt.x - zoomW / 2, -(zoomAt.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' '));
-      el('use', { href: '#dk-demo-scene' }, zsvg);
-      knives.push(knife(zsvg, R));
-      $('dk-zoom-cap').textContent = 'A corner up close, to scale (' + lengthSay(zoomW / k) + ' across)';
-    }
+    // The close-up follows the knife, to scale: wide enough to show a lead-in and its hop.
+    var zoomW = Math.max(2.6 * cfg.leadInLength * k, 14 * R);
+    function zoomTo(p) { zsvg.setAttribute('viewBox', [p.x - zoomW / 2, -(p.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' ')); }
+    $('dk-zoom').hidden = false;
+    zoomTo(samples[0]);
+    el('use', { href: '#dk-demo-scene' }, zsvg);
+    knives.push(knife(zsvg, R));
+    $('dk-zoom-cap').textContent = 'Following the knife, to scale (' + lengthSay(zoomW / k) + ' across)';
     $('dk-demo-title').textContent = title;
     $('dk-demo-scale').textContent = 'Circle: the holder, hollow while hopping' + (showR > R * 1.05 ? ' (drawn larger).' : '.');
     var s = done ? null : res.stats;
     $('dk-demo-stats').textContent = (problem ? problem + ' ' : '') + (done ? 'Load the original to see these settings on it.'
       : (cfg.leadIn ? plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
-        : 'Lead-ins are off: ' + plural(s.swivels, 'swivel') + '.'));
+        : 'Lead-ins are off: ' + plural(s.swivels, 'swivel') + '.')) +
+      (s && s.tightArcs ? ' ' + plural(s.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (s.tightArcs === 1 ? 'it.' : 'them.') : '');
 
     // the trail, coloured by where the tip is: on the wanted cut, a slit in the waste, a slit into the part
     var tol = Math.max(span / 400, R * 0.3), cell = tol, grid = {};
@@ -1610,6 +1594,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         } else { cur = null; lastTip = null; }
       }
       var p = samples[Math.min(i, samples.length - 1)];
+      zoomTo(p);
       knives.forEach(function(kn) {
         kn.holder.setAttribute('cx', p.x); kn.holder.setAttribute('cy', p.y);
         kn.holder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
@@ -1814,10 +1799,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         (s.spindleRemoved ? 'Spindle start removed from ' + plural(s.spindleRemoved, 'line') + '. ' : (cfg.stripSpindle ? '' : 'Spindle commands kept: make sure the spindle can’t start. ')) +
         (saved.length ? 'Saved to File Manager: ' + saved.map(esc).join(', ') + '. ' : '') +
         'Check it in the preview before you run it.' + (warn.length ? '<ul><li>' + warn.map(esc).join('</li><li>') + '</li></ul>' : ''));
-      if (!warn.length) { window.postMessage({ type: 'close-plugin-dialog' }, '*'); return; }   // done: the preview shows the result
-      await readLoaded();
-      await showSource();
-      demo();
+      // Done: close, as QuickCut does after loading; the preview shows the result. Warnings
+      // were shown before processing (the Auto box), and processing again shows them again.
+      setTimeout(function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); }, 100);
     } catch (e) {
       note('bad', esc(e.message || String(e)));
       btn.disabled = !(loaded && loaded.filename);
