@@ -28,6 +28,11 @@
   .dk-demo { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; }
   .dk-demo svg { width: 260px; max-width: 100%; height: auto; max-height: 240px; flex: none; }
   .dk-sub-check { margin-top: 14px; }
+  .dk-danger-text { color: var(--dk-danger) !important; }
+  .dk-wrapper [hidden] { display: none !important; }
+  .dk-speed { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .dk-speed .dk-btn { padding: 2px 10px !important; min-height: 0 !important; font-size: 0.85em; }
+  .dk-speed .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-zoom { margin: 0; flex: none; text-align: center; }
   .dk-zoom svg { width: 150px; height: 150px; border: 1px solid var(--color-border); border-radius: 8px; display: block; }
   .dk-zoom figcaption { font-size: 0.8em; color: var(--color-text-secondary); margin-top: 4px; max-width: 150px; }
@@ -80,7 +85,8 @@
         title="In the program's units. Moves below this are cuts. 0 when Z0 is the top of the material."></div>
     </div>
     <label class="dk-check"><input type="checkbox" id="dk-stripSpindle">
-      <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span></span></label>
+      <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span>
+      <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span></label>
     <div class="dk-sub">Into and out of each cut</div>
     <div class="dk-grid">
       <div class="dk-field"><label for="dk-rampLength">Ramp in over (mm)</label><input class="dk-input" id="dk-rampLength" inputmode="decimal"
@@ -120,6 +126,11 @@
         <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
         <div id="dk-demo-scale">Circle: the knife holder (hollow while hopping). Drawn to scale.</div>
         <div id="dk-demo-stats"></div>
+        <div class="dk-speed" role="group" aria-label="Animation speed">Speed:
+          <button type="button" class="dk-btn dk-ghost" data-speed="60">Slow</button>
+          <button type="button" class="dk-btn dk-ghost" data-speed="30">Normal</button>
+          <button type="button" class="dk-btn dk-ghost" data-speed="10">Fast</button>
+        </div>
       </div>
     </div>
     <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
@@ -886,7 +897,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   protect.addEventListener('change', function() { cfg.protect = protect.value; save(); checkAuto(); demo(); });
   var strip = $('dk-stripSpindle');
   strip.checked = !!cfg.stripSpindle;
-  strip.addEventListener('change', function() { cfg.stripSpindle = strip.checked; save(); });
+  function spindleShown() { $('dk-spindle-warn').hidden = strip.checked; }
+  spindleShown();
+  strip.addEventListener('change', function() { cfg.stripSpindle = strip.checked; save(); spindleShown(); });
   var leadIn = $('dk-leadIn');
   leadIn.checked = !!cfg.leadIn;
   function leadInShown() {
@@ -973,6 +986,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     return ['G21 G90 G17', 'G0 Z5'].concat(shape(DEMO_PART), shape(DEMO_HOLE), ['M30']).join('\n') + '\n';
   })();
   var NS = 'http://www.w3.org/2000/svg', demoRun = 0;
+  // How long one run of the animation takes (seconds): the viewer's choice, kept in this browser.
+  var demoDur = 30, demoProgress = null;
+  try { var savedDur = Number(localStorage.getItem('dk-demo-speed')); if ([10, 30, 60].indexOf(savedDur) >= 0) demoDur = savedDur; } catch (e) {}
+  function speedShown() {
+    document.querySelectorAll('.dk-speed [data-speed]').forEach(function(b) { b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-speed')) === demoDur)); });
+  }
+  document.querySelectorAll('.dk-speed [data-speed]').forEach(function(b) {
+    b.addEventListener('click', function() {
+      demoDur = Number(b.getAttribute('data-speed'));
+      try { localStorage.setItem('dk-demo-speed', String(demoDur)); } catch (e) {}
+      speedShown();
+      if (demoProgress) demoProgress.retime();
+    });
+  });
+  speedShown();
   function el(name, attrs, parent) {
     var e = document.createElementNS(NS, name);
     for (var k in attrs) e.setAttribute(k, attrs[k]);
@@ -1106,10 +1134,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     }
     var COLOR = { ok: 'var(--dk-accent-text)', waste: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
     var i = 0, cur = null, curKind = null, lastTip = null;
-    var perFrame = Math.max(2, Math.round(samples.length / 480));   // about 8 s at 60 fps
-    function frame() {
+    // Time-based, so it runs at the same speed on any display: the whole run takes demoDur seconds.
+    var t0 = null;
+    demoProgress = { retime: function() { if (t0 !== null) t0 = performance.now() - i / samples.length * demoDur * 1000; } };
+    function frame(now) {
       if (run !== demoRun || !ROOT.isConnected) return;
-      for (var n = 0; n < perFrame && i < samples.length; n++, i++) {
+      if (t0 === null) t0 = now;
+      var upto = Math.min(samples.length, Math.max(i + 1, Math.floor((now - t0) / (demoDur * 1000) * samples.length)));
+      for (; i < upto; i++) {
         var sm = samples[i];
         if (sm.cut) {
           var kd = kind(sm.tip);
