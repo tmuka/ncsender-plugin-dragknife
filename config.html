@@ -1623,8 +1623,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     el('polygon', { points: pts(right), fill: 'color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
     var bladeG = el('g', {}, svg);
     el('polygon', { points: pts(slabTop), fill: 'color-mix(in srgb, var(--color-accent) 30%, transparent)', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
-    // the cut you want, dashed on the top
-    el('polyline', { points: pts([P(0, 0, 0), P(A, 0, 0), P(A, B, 0)]), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', 'vector-effect': NSS }, svg);
+    // the cut you want, dashed at the cut's depth (where the tip runs) and faint on the top
+    el('polyline', { points: pts([P(0, 0, 0), P(A, 0, 0), P(A, B, 0)]), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, opacity: 0.4, 'vector-effect': NSS }, svg);
+    el('polyline', { points: pts([P(0, 0, -D), P(A, 0, -D), P(A, B, -D)]), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', 'vector-effect': NSS }, svg);
     var trail = el('g', {}, svg);
     var axisTrail = el('polyline', { points: '', fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, opacity: 0.6, 'vector-effect': NSS }, svg);
     var holderG = el('g', {}, svg);
@@ -1678,9 +1679,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         if (!sm.cut && i > 0 && samples[i - 1].cut) hopped = true;
         if (sm.cut && sm.tip) {
           var kd = hopped && sm.tip.y < -0.05 ? 'lead' : 'cut';   // before the corner, on the next side extended: the slit in the waste
-          if (!cur || kd !== curKind || !lastTip) { cur = el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, 0)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 2.2, 'stroke-linecap': 'round', 'vector-effect': NSS }, trail); curKind = kd; }
-          cur.setAttribute('points', cur.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, 0)]));
-          lastTip = sm.tip;
+          // the slit: its bottom where the tip is (at its depth), and a fainter line where it opens on the top
+          if (!cur || kd !== curKind || !lastTip) {
+            cur = { top: el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, 0)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 1.2, opacity: 0.45, 'vector-effect': NSS }, trail),
+              bottom: el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, lastTip.z)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 2.2, 'stroke-linecap': 'round', 'vector-effect': NSS }, trail) };
+            curKind = kd;
+          }
+          cur.top.setAttribute('points', cur.top.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, 0)]));
+          cur.bottom.setAttribute('points', cur.bottom.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, sm.z)]));
+          lastTip = { x: sm.tip.x, y: sm.tip.y, z: sm.z };
         } else { cur = null; lastTip = null; }
         if (i % 3 === 0) { axisPts += ' ' + pts([P(sm.x, sm.y, sm.z + E)]); }
       }
