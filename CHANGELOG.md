@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Preview: zoomed in, the view follows the knife, gliding to keep the blade tip in view (it waits a moment after you zoom or pan).
+- Preview: lead-in slits are strong amber and slits into a part red, so they stand out from the cut; they were too pale to see.
+
 ## 0.1.0: First release
 
 - First version: a **Process for drag knife** button that rewrites the loaded program (blade offset, corner swivels,

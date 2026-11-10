@@ -8,6 +8,9 @@
     --dk-danger: color-mix(in srgb, var(--color-danger, #e74c3c) 70%, var(--color-text-primary));
     --dk-ok: color-mix(in srgb, var(--color-success, #2e9e6b) 70%, var(--color-text-primary));
     --dk-warn: color-mix(in srgb, var(--color-warning, #d9a441) 38%, var(--color-text-primary));
+    /* The preview's slits: strong amber and red, so they stand out from the cut on either theme. */
+    --dk-slit: #f5a524;
+    --dk-slit-bad: #ff4d4d;
     --dk-btn-bg: color-mix(in srgb, var(--color-accent) 70%, #000);
     /* Full window, like QuickCut: 24 px clear all round. */
     width: calc(100vw - 48px); height: calc(100vh - 48px); box-sizing: border-box;
@@ -226,8 +229,8 @@
             <div class="dk-legend">
               <div><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>The cut you want; shaded is the part</div>
               <div><span class="dk-key" style="color: var(--dk-accent-text)"></span>What the blade cuts</div>
-              <div><span class="dk-key" style="color: var(--dk-warn)"></span>Lead-in slit in the waste</div>
-              <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
+              <div><span class="dk-key" style="color: var(--dk-slit)"></span>Lead-in slit in the waste</div>
+              <div><span class="dk-key" style="color: var(--dk-slit-bad)"></span>Slit into the part (Auto keeps them out)</div>
               <div><span class="dk-key" style="color: var(--color-text-secondary); border-top-width: 1px"></span>The holder’s path</div>
               <div id="dk-demo-scale">The cylinder is the holder, drawn larger; in the close-up, the circle is the holder to scale, hollow while hopping.</div>
               <div id="dk-demo-stats"></div>
@@ -1605,7 +1608,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   // the view once zoomed, a double-click (or Fit) shows everything again. The view is
   // kept as fractions of the whole picture, so it holds while the animation repeats
   // and settings change.
-  var view3d = { base: null, user: null };   // user: [fx, fy, fw] of base (fw: width fraction, 1 = all)
+  var view3d = { base: null, user: null, held: false, touched: 0 };   // user: [fx, fy, fw] of base (fw: width fraction, 1 = all)
   function applyView3d() {
     var svg = $('dk-side-svg'), b = view3d.base;
     if (!svg || !b) return;
@@ -1635,6 +1638,25 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     view3d.user = [fx, fy, fw];
     applyView3d();
   }
+  // Zoomed in, the view follows the knife: once it gets near an edge (outside the
+  // middle 60%), the view glides to bring it back in. Not while a finger or the mouse
+  // is moving the view, nor for a moment after the user zooms or pans.
+  function followView3d(q) {
+    var b = view3d.base, u = view3d.user;
+    if (!b || !u || view3d.held || Date.now() - view3d.touched < 1500) return;
+    var x = b[0] + u[0] * b[2], y = b[1] + u[1] * b[3], w = u[2] * b[2], h = u[2] * b[3];
+    // glide a part of the way each frame, but never let it leave the view (the outer 8 %)
+    function need(v, lo, size) {
+      function past(f) { var a = lo + size * f, z = lo + size * (1 - f); return v < a ? v - a : v > z ? v - z : 0; }
+      var inner = past(0.2), outer = past(0.08);
+      if (!inner) return 0;
+      return Math.abs(inner) < size * 0.02 ? inner : (inner < 0 ? -1 : 1) * Math.max(Math.abs(outer), Math.abs(inner) * 0.15);
+    }
+    var dx = need(q.x, x, w), dy = need(q.y, y, h);
+    if (!dx && !dy) return;
+    view3d.user = [u[0] + dx / b[2], u[1] + dy / b[3], u[2]];
+    applyView3d();
+  }
   (function wireZoom() {
     var svg = $('dk-side-svg');
     if (!svg) return;
@@ -1642,6 +1664,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       e.preventDefault();
       var p = svgPoint(svg, e.clientX, e.clientY);
       if (p) zoomView3d(p, Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)));
+      view3d.touched = Date.now();
     }, { passive: false });
     var ptrs = {}, last = null;
     function state() {
@@ -1651,6 +1674,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     svg.addEventListener('pointerdown', function(e) {
       ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
       try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+      view3d.held = true;
       last = state();
     });
     svg.addEventListener('pointermove', function(e) {
@@ -1666,7 +1690,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       }
       last = now;
     });
-    function up(e) { delete ptrs[e.pointerId]; svg.classList.remove('dk-dragging'); last = Object.keys(ptrs).length ? state() : null; }
+    function up(e) { delete ptrs[e.pointerId]; svg.classList.remove('dk-dragging'); last = Object.keys(ptrs).length ? state() : null; view3d.held = !!last; view3d.touched = Date.now(); }
     svg.addEventListener('pointerup', up);
     svg.addEventListener('pointercancel', up);
     svg.addEventListener('dblclick', function() { view3d.user = null; applyView3d(); });
@@ -1829,7 +1853,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         el('circle', { cx: tp.x, cy: tp.y, r: RH * 0.15, fill: 'var(--dk-warn)' }, bladeG);
       }
     }
-    var LOOK = { cut: 'var(--dk-accent-text)', lead: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
+    var LOOK = { cut: 'var(--dk-accent-text)', lead: 'var(--dk-slit)', bad: 'var(--dk-slit-bad)' };
     var hopped = false, cur = null, curKind = null, lastTip = null, axisPts = '';
     var i = 0, t0 = null, dur = paceMs(sc.pathLen, sc.span);
     sideRetime = function() {
@@ -1932,6 +1956,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       axisTrail.setAttribute('points', axisPts);
       var p = samples[Math.min(i, samples.length - 1)];
       draw(p); say(Math.min(i, samples.length - 1));
+      followView3d(p.tip ? P(p.tip.x, p.tip.y, p.z) : P(p.x, p.y, p.z + E));
       zoomTo(p);
       zHolder.setAttribute('cx', p.x); zHolder.setAttribute('cy', p.y);
       zHolder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
@@ -1945,7 +1970,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
 
   // ---- help: figures drawn by the processor, in the dialog's colours ----
-  var HELP_C = { want: 'var(--color-text-secondary)', axis: 'color-mix(in srgb, var(--color-accent) 55%, var(--color-text-primary))', tip: 'var(--dk-accent-text)', slit: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
+  var HELP_C = { want: 'var(--color-text-secondary)', axis: 'color-mix(in srgb, var(--color-accent) 55%, var(--color-text-primary))', tip: 'var(--dk-accent-text)', slit: 'var(--dk-slit)', bad: 'var(--dk-slit-bad)' };
   // A top-view figure: the wanted cut dashed, the holder's path thin (dotted in the
   // air), the blade tip's trail coloured: on the cut, a slit in the waste, a slit in the part.
   function helpFigure(prog, processed, R, opts) {
