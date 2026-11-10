@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+      # test builds are pre-releases made by hand (testzip.py), not by this workflow
+      - '!v*-test*'
 
 jobs:
   release:
