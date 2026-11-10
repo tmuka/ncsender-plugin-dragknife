@@ -68,7 +68,7 @@ Tangent-continuous joins (line→arc, arc→arc within the threshold) get no swi
 
 ## Lead-in corners (0.1.0-test.3, the user's request 2026-11-09)
 
-At a turn sharper than `leadInAngle` (0 = off): the tip finishes the line at the corner C; hop to `surface + hopHeight`;
+At a turn sharper than `leadInAngle` (default 60; `leadIn: false` turns lead-ins off): the tip finishes the line at the corner C; hop to `surface + hopHeight`;
 rapid to the axis point for L = C − leadInLength·d2 (the next line extended behind C); drop to the surface; feed to
 C + r·d2 ramping to depth, so the blade has dragged `leadInLength` along d2 before the corner. The slit lies on d2's
 extension: on the right of the path at a left turn, the left at a right turn. With the shape's winding (signed

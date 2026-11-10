@@ -26,7 +26,12 @@
   .dk-auto ul { margin: 0; padding-left: 18px; flex: 1 1 100%; }
   .dk-auto .dk-btn { min-height: 34px; padding: 4px 12px !important; }
   .dk-demo { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; }
-  .dk-demo svg { width: 260px; max-width: 100%; height: auto; flex: none; }
+  .dk-demo svg { width: 260px; max-width: 100%; height: auto; max-height: 240px; flex: none; }
+  .dk-sub-check { margin-top: 14px; }
+  .dk-zoom { margin: 0; flex: none; text-align: center; }
+  .dk-zoom svg { width: 150px; height: 150px; border: 1px solid var(--color-border); border-radius: 8px; display: block; }
+  .dk-zoom figcaption { font-size: 0.8em; color: var(--color-text-secondary); margin-top: 4px; max-width: 150px; }
+  .dk-off { opacity: 0.5; }
   .dk-legend { flex: 1 1 200px; display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--color-text-secondary); line-height: 1.35; }
   .dk-legend b { color: var(--color-text-primary); font-weight: 600; }
   .dk-key { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 2px solid currentColor; }
@@ -83,10 +88,11 @@
       <div class="dk-field"><label for="dk-liftOut">Lift out over (mm)</label><input class="dk-input" id="dk-liftOut" inputmode="decimal"
         title="Closed shapes rise to the material top over this distance while still moving forward, over the recut stretch. 0 lifts straight up."></div>
     </div>
-    <div class="dk-sub">Lead into sharp corners</div>
-    <div class="dk-grid">
+    <label class="dk-check dk-sub-check"><input type="checkbox" id="dk-leadIn">
+      <span><b>Lead into sharp corners</b><span class="dk-hint" style="display:block">Hop up at the corner, come down behind it on the next line extended, and cut into the corner already lined up. Off: every sharp corner swivels in place.</span></span></label>
+    <div class="dk-grid" id="dk-leadIn-fields">
       <div class="dk-field"><label for="dk-leadInAngle">Lead in above (°)</label><input class="dk-input" id="dk-leadInAngle" inputmode="decimal"
-        title="Turns sharper than this hop up and come back down behind the corner, on the next line extended, then cut into the corner along it, so the blade is already lined up when the cut begins. 0 turns it off (corners swivel instead)."></div>
+        title="Turns sharper than this hop up and come back down behind the corner, on the next line extended, then cut into the corner along it, so the blade is already lined up when the cut begins. 0 turns them off too."></div>
       <div class="dk-field"><label for="dk-leadInLength">Lead-in length (mm)</label><input class="dk-input" id="dk-leadInLength" inputmode="decimal"
         title="How far behind the corner the lead-in starts. The blade ramps from the material top to full depth over this, so it lines up while shallow. A few times the blade offset."></div>
       <div class="dk-field"><label for="dk-hopHeight">Hop height (mm)</label><input class="dk-input" id="dk-hopHeight" inputmode="decimal"
@@ -101,14 +107,18 @@
     </div>
     <div class="dk-auto" id="dk-auto" hidden aria-live="polite"></div>
     <div class="dk-demo">
-      <svg id="dk-demo-svg" viewBox="-8 -40 66 48" role="img" aria-label="Animation: the knife cutting a sample part with these corner settings"></svg>
+      <svg id="dk-demo-svg" viewBox="0 0 10 10" role="img" aria-label="Animation: the knife cutting with these settings"></svg>
+      <figure class="dk-zoom" id="dk-zoom" hidden>
+        <svg id="dk-zoom-svg" viewBox="0 0 10 10" role="img" aria-label="Close-up of one corner"></svg>
+        <figcaption id="dk-zoom-cap"></figcaption>
+      </figure>
       <div class="dk-legend">
-        <div id="dk-demo-title"><b>How these settings cut a sample part</b></div>
-        <div><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>The cut you want; shaded is the part, with a hole</div>
+        <div id="dk-demo-title"><b>How these settings cut</b></div>
+        <div><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>The cut you want; shaded is the part</div>
         <div><span class="dk-key" style="color: var(--dk-accent-text)"></span>What the blade cuts</div>
         <div><span class="dk-key" style="color: var(--dk-warn)"></span>Lead-in slit in the waste</div>
         <div><span class="dk-key" style="color: var(--dk-danger)"></span>Slit into the part</div>
-        <div>Circle: the knife holder (hollow while hopping). Sizes exaggerated.</div>
+        <div id="dk-demo-scale">Circle: the knife holder (hollow while hopping). Drawn to scale.</div>
         <div id="dk-demo-stats"></div>
       </div>
     </div>
@@ -167,7 +177,8 @@ var DragKnife = (function () {
     liftFraction: 0.5,   // how far up toward the surface the blade lifts (0..1)
     liftRamp: 1,         // mm; after a lifted swivel, back to depth over this
     stripSpindle: true,  // remove spindle starts (M3/M4) and speeds (S): a knife must never spin
-    leadInAngle: 0,      // degrees; 0 = off. Turns sharper than this hop up and lead back in along the next line
+    leadIn: true,        // lead into sharp corners (below) instead of swivelling
+    leadInAngle: 60,     // degrees; turns sharper than this hop up and lead back in along the next line
     leadInLength: 1.5,   // mm; the lead-in starts this far behind the corner, on the next line extended
     hopHeight: 1,        // mm above the material top while hopping to the lead-in
     protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
@@ -277,6 +288,9 @@ var DragKnife = (function () {
       s[k] = isFinite(n) ? n : DEFAULTS[k];
     }
     if (s.offset < 0) s.offset = 0;
+    // Before the switch, lead-ins were off by a 0 angle: saved settings from then
+    // (no leadIn key, angle 0) get the default switch and angle.
+    if (!(raw && typeof raw.leadIn === 'boolean') && !(s.leadInAngle > 0)) s.leadInAngle = DEFAULTS.leadInAngle;
     s.liftFraction = Math.max(0, Math.min(1, s.liftFraction));
     return s;
   }
@@ -321,8 +335,14 @@ var DragKnife = (function () {
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
 
   // process(text, settings) -> { text, stats }   (throws Error('Line n: ...') on what it won't rewrite)
-  function process(text, rawSettings, meta) {
+  // The settings as the processor reads them: lead-ins switched off = angle 0.
+  function active(rawSettings) {
     var cfg = readSettings(rawSettings);
+    if (!cfg.leadIn) cfg.leadInAngle = 0;
+    return cfg;
+  }
+  function process(text, rawSettings, meta) {
+    var cfg = active(rawSettings);
     if (isProcessed(text)) throw new Error('This program has already been processed for the drag knife. Load the original file instead.');
     var ctx = {}, found = null;
     if (cfg.protect === 'auto' && cfg.leadInAngle > 0) {
@@ -412,7 +432,7 @@ var DragKnife = (function () {
     if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var st = { mm: true, abs: true, arcAbs: false, plane: 17, comp: 40, motion: 0, f: null, pos: { x: null, y: null, z: null } };
     var out = [];
-    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, units: null };
+    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, rampsDropped: 0, units: null };
     var stroke = null;
     var surface = cfg.surfaceZ;
 
@@ -568,6 +588,22 @@ var DragKnife = (function () {
   }
 
   // One cut: from the move that goes into the material to the one that leaves it.
+  // How many leading elements are a back-and-forth ramp on one line that only goes
+  // down and ends where it began (0 when there's none, or nothing would be left).
+  function rampZigzag(elems, tol) {
+    var e0 = elems[0];
+    if (e0.kind !== 'line') return 0;
+    var d = mul(sub(e0.to, e0.from), 1 / dist(e0.from, e0.to)), reversed = false;
+    for (var k = 0; k < elems.length - 1; k++) {
+      var e = elems[k];
+      if (e.kind !== 'line' || e.z1 > e.z0 + 1e-9) return 0;
+      if (Math.abs(cross(d, sub(e.to, e0.from))) > tol) return 0;   // off the line
+      if (k > 0 && dot(sub(e.to, e.from), d) * dot(sub(elems[k - 1].to, elems[k - 1].from), d) < 0) reversed = true;
+      if (reversed && dist(e.to, e0.from) < tol && e.z1 < e0.z0 - 1e-9) return k + 1;
+    }
+    return 0;
+  }
+
   function rewriteStroke(stroke, st, cfg, stats, ctx) {
     var recs = stroke.recs, scale = stroke.mm ? 1 : 1 / 25.4;
     var r = cfg.offset * scale, tol = 0.005 * scale, surface = cfg.surfaceZ;
@@ -598,6 +634,15 @@ var DragKnife = (function () {
     if (!elems.length) return verbatim;
     // Verticals between the last XY move and the trailing ones stay with the trail.
     if (pending.length) trail = pending.concat(trail);
+
+    // A ramp-in that zigzags back and forth on one line and comes back to where it
+    // started (QuickCut's, most CAM's) is dropped: the rewrite ramps in by itself,
+    // and its reversals would otherwise be sharp corners.
+    var zz = rampZigzag(elems, tol);
+    if (zz) {
+      stats.rampsDropped++;
+      elems = elems.slice(zz);
+    }
 
     var closed = dist(elems[0].from, elems[elems.length - 1].to) < tol && elems.length > 0;
     // Which way round a closed shape goes: +1 anticlockwise (inside on the left), -1 clockwise.
@@ -833,7 +878,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       cfg[k] = stored(k, n);
       save();
       if (k === 'leadInAngle' || k === 'swivelAngle' || k === 'surfaceZ') checkAuto();
-      if (k === 'leadInAngle' || k === 'swivelAngle') demo();
+      demo();
     });
   });
   var protect = $('dk-protect');
@@ -842,6 +887,19 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   var strip = $('dk-stripSpindle');
   strip.checked = !!cfg.stripSpindle;
   strip.addEventListener('change', function() { cfg.stripSpindle = strip.checked; save(); });
+  var leadIn = $('dk-leadIn');
+  leadIn.checked = !!cfg.leadIn;
+  function leadInShown() {
+    var box = $('dk-leadIn-fields');
+    box.classList.toggle('dk-off', !cfg.leadIn);
+    box.querySelectorAll('input, select').forEach(function(e) { e.disabled = !cfg.leadIn; });
+  }
+  leadInShown();
+  leadIn.addEventListener('change', function() {
+    cfg.leadIn = leadIn.checked;
+    if (cfg.leadIn && !(cfg.leadInAngle > 0)) { cfg.leadInAngle = DragKnife.DEFAULTS.leadInAngle; $('dk-leadInAngle').value = String(cfg.leadInAngle); }
+    save(); leadInShown(); checkAuto(); demo();
+  });
   function save() {
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
   }
@@ -863,7 +921,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   async function checkAuto() {
     var box = $('dk-auto'), sel = $('dk-protect');
     sel.classList.remove('dk-warn');
-    if (cfg.protect !== 'auto' || !(cfg.leadInAngle > 0)) { box.hidden = true; return; }
+    if (cfg.protect !== 'auto' || !cfg.leadIn || !(cfg.leadInAngle > 0)) { box.hidden = true; return; }
     var text = await loadProgramText();
     if (!text || DragKnife.isProcessed(text)) { box.hidden = true; return; }
     var a;
@@ -901,12 +959,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     }
   }
 
-  // ---- the animation: the real processor on a sample part, sizes exaggerated ----
-  var DEMO_PART = [[0, 0], [48, 0], [48, 22], [34, 22], [34, 30], [0, 30]];   // outline with a notch (two inside corners)
-  var DEMO_HOLE = [[9, 9], [21, 9], [21, 21], [9, 21]];                       // a hole in it
+  // ---- the animation: the real processor and these settings, on the loaded
+  // program (or a sample part when none is loaded), drawn to scale ----
+  var DEMO_PART = [[0, 0], [60, 0], [60, 28], [42, 28], [42, 40], [0, 40]];   // mm: an outline with a notch
+  var DEMO_HOLE = [[12, 12], [28, 12], [28, 28], [12, 28]];                   // and a hole in it
   var DEMO_PROG = (function() {
     function shape(pts) {
-      var l = ['G0 X' + pts[0][0] + ' Y' + pts[0][1], 'G1 Z-1 F300'];
+      var l = ['G0 X' + pts[0][0] + ' Y' + pts[0][1], 'G1 Z-0.3 F300'];
       for (var i = 1; i <= pts.length; i++) l.push('G1 X' + pts[i % pts.length][0] + ' Y' + pts[i % pts.length][1] + (i === 1 ? ' F1000' : ''));
       l.push('G0 Z5');
       return l;
@@ -924,75 +983,153 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var c = false;
     for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       var a = poly[i], b = poly[j];
-      if ((a[1] > p.y) !== (b[1] > p.y) && p.x < (b[0] - a[0]) * (p.y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+      if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) c = !c;
     }
     return c;
   }
-  function onPath(p) {
-    function seg(poly) {
-      var best = Infinity;
-      for (var i = 0; i < poly.length; i++) {
-        var a = poly[i], b = poly[(i + 1) % poly.length], ex = b[0] - a[0], ey = b[1] - a[1];
-        var t = Math.max(0, Math.min(1, ((p.x - a[0]) * ex + (p.y - a[1]) * ey) / (ex * ex + ey * ey)));
-        best = Math.min(best, Math.hypot(a[0] + ex * t - p.x, a[1] + ey * t - p.y));
-      }
-      return best;
-    }
-    return Math.min(seg(DEMO_PART), seg(DEMO_HOLE)) < 0.35;
+  // The original program's cuts as runs of points; closed runs are shapes.
+  function cutRuns(text, step, surface) {
+    var runs = [], cur = null;
+    DragKnife.trace(text, step).forEach(function(p) {
+      if (p.z < surface - 1e-9) { if (!cur) { cur = []; runs.push(cur); } cur.push(p); } else cur = null;
+    });
+    return runs.map(function(r) {
+      var a = r[0], b = r[r.length - 1];
+      return { pts: r, closed: r.length > 3 && Math.hypot(a.x - b.x, a.y - b.y) < step * 2 };
+    });
   }
-  function demo() {
+  function bounds(pts) {
+    var bb = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    pts.forEach(function(p) { bb.x0 = Math.min(bb.x0, p.x); bb.y0 = Math.min(bb.y0, p.y); bb.x1 = Math.max(bb.x1, p.x); bb.y1 = Math.max(bb.y1, p.y); });
+    return bb;
+  }
+  async function demo() {
     var svg = $('dk-demo-svg');
     if (!svg) return;
     var run = ++demoRun;
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var text = await loadProgramText(), title, src = 'loaded';
+    if (run !== demoRun) return;
+    var done = false;
+    if (text && DragKnife.isProcessed(text)) { title = 'The loaded program (already processed)'; done = true; }
+    else if (text) title = 'Your loaded program with these settings';
+    var res = null, problem = '';
+    if (text && !done) {
+      try { res = DragKnife.process(text, cfg); if (!res.changed) { problem = 'The loaded program has no cuts below Z' + cfg.surfaceZ + '.'; res = null; } }
+      catch (e) { problem = 'The loaded program can’t be processed: ' + (e.message || e); res = null; }
+    }
+    if (!text || (!res && !done)) { text = DEMO_PROG; src = 'sample'; title = 'A sample part (60 × 40 mm) with these settings'; res = DragKnife.process(text, cfg); }
+    var out = done ? text : res.text, units = done ? (/G20\b/i.test(text) ? 'in' : 'mm') : res.stats.units;
+    var k = units === 'in' ? 1 / 25.4 : 1, R = cfg.offset * k, surface = cfg.surfaceZ;
+
+    // size from the original cuts, then a step that gives a few thousand samples
+    var coarse = cutRuns(done ? out : text, 1e9, surface), all = [];
+    coarse.forEach(function(r) { all = all.concat(r.pts); });
+    if (!all.length) return;
+    var bb = bounds(all), span = Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0, 1e-3), step = span / 600;
+    var runs = cutRuns(done ? out : text, step, surface);
+    var samples = DragKnife.dragTip(DragKnife.trace(out, step), R, surface);
+    if (samples.length > 40000) samples = DragKnife.dragTip(DragKnife.trace(out, step * samples.length / 40000), R, surface);
+    // show from the first cut to the last, and what the knife does near the work (hops, lead-ins)
+    var first = samples.findIndex(function(p) { return p.cut; }), last = samples.length - 1;
+    while (last > 0 && !samples[last].cut) last--;
+    samples = samples.slice(Math.max(0, first - 1), last + 1);
+    var near = samples.filter(function(p) { return p.cut || p.z <= surface + (cfg.hopHeight + 0.5) * k; });
+    var sb = bounds(near.concat(all)), pad = Math.max(sb.x1 - sb.x0, sb.y1 - sb.y0) * 0.06 + R * 2;
+    var vw = sb.x1 - sb.x0 + 2 * pad, vh = sb.y1 - sb.y0 + 2 * pad;
+    var zsvg = $('dk-zoom-svg');
+    [svg, zsvg].forEach(function(e) { while (e.firstChild) e.removeChild(e.firstChild); });
     svg.removeAttribute('data-done');
-    var R = 1.6;
-    var set = { offset: R, swivelAngle: cfg.swivelAngle, surfaceZ: 0, rampLength: 3, liftOut: 2, leadInAngle: cfg.leadInAngle,
-      leadInLength: 6, hopHeight: 3, protect: cfg.protect, liftAngle: 0, stripSpindle: true };
-    var res;
-    try { res = DragKnife.process(DEMO_PROG, set); } catch (e) { return; }
-    var samples = DragKnife.dragTip(DragKnife.trace(res.text, 0.25), R, 0);
-    var g = el('g', { transform: 'scale(1,-1)' }, svg);
-    var d = function(poly) { return 'M' + poly.map(function(p) { return p[0] + ' ' + p[1]; }).join(' L') + ' Z'; };
-    el('path', { d: d(DEMO_PART) + ' ' + d(DEMO_HOLE), 'fill-rule': 'evenodd', fill: 'color-mix(in srgb, var(--color-accent) 16%, transparent)' }, g);
-    el('path', { d: d(DEMO_PART) + ' ' + d(DEMO_HOLE), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 0.35, 'stroke-dasharray': '1 1', opacity: 0.8 }, g);
+    svg.setAttribute('viewBox', [sb.x0 - pad, -(sb.y1 + pad), vw, vh].map(function(n) { return n.toFixed(4); }).join(' '));
+    var u = Math.max(vw, vh) / 260;   // one screen pixel in the full view, roughly
+    // Strokes keep their screen width (non-scaling), so the close-up can show the same scene.
+    var NSS = 'non-scaling-stroke';
+    var g = el('g', { id: 'dk-demo-scene', transform: 'scale(1,-1)' }, svg);
+    var shapes = runs.filter(function(r) { return r.closed; }).map(function(r) { return r.pts; });
+    var path = function(pts, close) { return 'M' + pts.map(function(p) { return p.x.toFixed(4) + ' ' + p.y.toFixed(4); }).join(' L') + (close ? ' Z' : ''); };
+    if (shapes.length) el('path', { d: shapes.map(function(p) { return path(p, true); }).join(' '), 'fill-rule': 'evenodd', fill: 'color-mix(in srgb, var(--color-accent) 16%, transparent)' }, g);
+    el('path', { d: runs.map(function(r) { return path(r.pts, r.closed); }).join(' '), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '3 3', 'vector-effect': NSS, opacity: 0.8 }, g);
     var trail = el('g', {}, g);
-    var holder = el('circle', { r: R, fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 0.45 }, g);
-    var blade = el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 0.6, 'stroke-linecap': 'round' }, g);
-    var s = res.stats;
-    $('dk-demo-stats').textContent = cfg.leadInAngle > 0
-      ? 'Here: ' + plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
-      : 'Lead-ins are off (Lead in above is 0): every sharp corner swivels.';
-    // the trail, coloured by where the tip is: on the path, a slit in the waste, a slit into the part
+    var showR = Math.max(R, 4 * u);
+    function knife(parent, rr) {
+      var kg = el('g', { transform: 'scale(1,-1)' }, parent);
+      return { r: rr, holder: el('circle', { r: rr, fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 1.3, 'vector-effect': NSS }, kg),
+        blade: el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'vector-effect': NSS }, kg) };
+    }
+    var knives = [knife(svg, showR)];
+    // The close-up: one corner the settings act on, to scale. A lead-in corner if
+    // there is one (where the knife first hops), else the first sharp corner.
+    var zoomAt = null, zoomW = Math.max(2.6 * cfg.leadInLength * k, 14 * R);
+    var corners = [];
+    coarse.forEach(function(rn) {
+      var p = rn.pts;
+      for (var ci = 1; ci < p.length - 1; ci++) {
+        var a1 = Math.atan2(p[ci].y - p[ci - 1].y, p[ci].x - p[ci - 1].x), a2 = Math.atan2(p[ci + 1].y - p[ci].y, p[ci + 1].x - p[ci].x);
+        var t = Math.abs(Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1))) * 180 / Math.PI;
+        if (t > cfg.swivelAngle && Math.hypot(p[ci + 1].x - p[ci].x, p[ci + 1].y - p[ci].y) > R) corners.push(p[ci]);
+      }
+    });
+    var hop = null;
+    for (var hi = 1; hi < samples.length && !hop; hi++) if (samples[hi - 1].cut && !samples[hi].cut && samples.slice(hi).some(function(q) { return q.cut; })) hop = samples[hi];
+    if (corners.length) {
+      zoomAt = corners[0];
+      if (hop && !done && res.stats.leadIns) corners.forEach(function(c) { if (Math.hypot(c.x - hop.x, c.y - hop.y) < Math.hypot(zoomAt.x - hop.x, zoomAt.y - hop.y)) zoomAt = c; });
+    }
+    $('dk-zoom').hidden = !zoomAt;
+    if (zoomAt) {
+      zsvg.setAttribute('viewBox', [zoomAt.x - zoomW / 2, -(zoomAt.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' '));
+      el('use', { href: '#dk-demo-scene' }, zsvg);
+      knives.push(knife(zsvg, R));
+      $('dk-zoom-cap').textContent = 'A corner up close, to scale (' + Math.round(zoomW / k * 10) / 10 + ' mm across)';
+    }
+    $('dk-demo-title').innerHTML = '<b>' + esc(title) + '</b>';
+    $('dk-demo-scale').textContent = 'Circle: the knife holder (hollow while hopping)' + (showR > R * 1.05 ? ', drawn larger than the ' + cfg.offset + ' mm offset so it shows.' : ', to scale.');
+    var s = done ? null : res.stats;
+    $('dk-demo-stats').textContent = (problem ? problem + ' ' : '') + (done ? 'Load the original to see these settings on it.'
+      : (cfg.leadIn ? plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
+        : 'Lead-ins are off: ' + plural(s.swivels, 'swivel') + '.'));
+
+    // the trail, coloured by where the tip is: on the wanted cut, a slit in the waste, a slit into the part
+    var tol = Math.max(span / 400, R * 0.3), cell = tol, grid = {};
+    runs.forEach(function(r) { r.pts.forEach(function(p) { var key = Math.floor(p.x / cell) + ',' + Math.floor(p.y / cell); (grid[key] = grid[key] || []).push(p); }); });
+    function onPath(p) {
+      var cx = Math.floor(p.x / cell), cy = Math.floor(p.y / cell);
+      for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
+        var list = grid[(cx + dx) + ',' + (cy + dy)];
+        if (list) for (var i = 0; i < list.length; i++) if (Math.hypot(list[i].x - p.x, list[i].y - p.y) < tol) return true;
+      }
+      return false;
+    }
     function kind(p) {
       if (onPath(p)) return 'ok';
-      var inPart = inPoly(p, DEMO_PART) && !inPoly(p, DEMO_HOLE);
-      return inPart ? 'bad' : 'waste';
+      var n = 0; shapes.forEach(function(poly) { if (inPoly(p, poly)) n++; });
+      return n % 2 ? 'bad' : 'waste';
     }
     var COLOR = { ok: 'var(--dk-accent-text)', waste: 'var(--dk-warn)', bad: 'var(--dk-danger)' };
-    var i = 0, cur = null, curKind = null, last = null;
-    var perFrame = Math.max(2, Math.round(samples.length / 360));   // about 6 s at 60 fps
+    var i = 0, cur = null, curKind = null, lastTip = null;
+    var perFrame = Math.max(2, Math.round(samples.length / 480));   // about 8 s at 60 fps
     function frame() {
       if (run !== demoRun || !ROOT.isConnected) return;
-      for (var k = 0; k < perFrame && i < samples.length; k++, i++) {
+      for (var n = 0; n < perFrame && i < samples.length; n++, i++) {
         var sm = samples[i];
         if (sm.cut) {
           var kd = kind(sm.tip);
-          if (!cur || kd !== curKind || !last) {
-            cur = el('polyline', { fill: 'none', stroke: COLOR[kd], 'stroke-width': kd === 'ok' ? 0.7 : 0.9, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-              points: last ? last.x + ',' + last.y : '' }, trail);
+          if (!cur || kd !== curKind || !lastTip) {
+            cur = el('polyline', { fill: 'none', stroke: COLOR[kd], 'stroke-width': kd === 'ok' ? 1.6 : 2.2, 'vector-effect': NSS, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+              points: lastTip ? lastTip.x.toFixed(4) + ',' + lastTip.y.toFixed(4) : '' }, trail);
             curKind = kd;
           }
-          cur.setAttribute('points', cur.getAttribute('points') + ' ' + sm.tip.x.toFixed(2) + ',' + sm.tip.y.toFixed(2));
-          last = sm.tip;
-        } else { cur = null; last = null; }
+          cur.setAttribute('points', cur.getAttribute('points') + ' ' + sm.tip.x.toFixed(4) + ',' + sm.tip.y.toFixed(4));
+          lastTip = sm.tip;
+        } else { cur = null; lastTip = null; }
       }
       var p = samples[Math.min(i, samples.length - 1)];
-      holder.setAttribute('cx', p.x); holder.setAttribute('cy', p.y);
-      holder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
-      holder.setAttribute('stroke-dasharray', p.cut ? 'none' : '0.8 0.6');
-      if (p.tip) { blade.setAttribute('x1', p.x); blade.setAttribute('y1', p.y); blade.setAttribute('x2', p.tip.x); blade.setAttribute('y2', p.tip.y); }
-      blade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
+      knives.forEach(function(kn) {
+        kn.holder.setAttribute('cx', p.x); kn.holder.setAttribute('cy', p.y);
+        kn.holder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
+        kn.holder.setAttribute('stroke-dasharray', p.cut ? 'none' : '2 1.5');
+        if (p.tip) { kn.blade.setAttribute('x1', p.x); kn.blade.setAttribute('y1', p.y); kn.blade.setAttribute('x2', p.tip.x); kn.blade.setAttribute('y2', p.tip.y); }
+        kn.blade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
+      });
       if (i < samples.length) requestAnimationFrame(frame);
       else {
         svg.setAttribute('data-done', '1');
@@ -1051,8 +1188,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         plural(s.swivels, 'corner swivel') + (s.leadIns ? ', ' + plural(s.leadIns, 'corner lead-in') + (cfg.protect === 'auto' ? ' (' + (s.holes ? plural(s.holes, 'hole') : 'no holes') + ' found)' : '') : '') + (s.lifted ? ', ' + s.lifted + ' lifted' : '') + ', program in ' + (s.units || 'mm') + '. ' +
         (s.spindleRemoved ? 'Spindle start removed from ' + plural(s.spindleRemoved, 'line') + '. ' : (cfg.stripSpindle ? '' : 'Spindle commands kept: make sure the spindle can’t start. ')) +
         'Check it in the preview before you run it.' + (warn.length ? '<ul><li>' + warn.map(esc).join('</li><li>') + '</li></ul>' : ''));
+      if (!warn.length) { window.postMessage({ type: 'close-plugin-dialog' }, '*'); return; }   // done: the preview shows the result
       await readLoaded();
       btn.disabled = true; // the loaded program is now the processed one
+      demo();
     } catch (e) {
       note('bad', esc(e.message || String(e)));
       btn.disabled = !(loaded && loaded.filename);
@@ -1060,7 +1199,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   });
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
-  readLoaded().then(checkAuto);
-  demo();
+  readLoaded().then(function() { checkAuto(); demo(); });
 })();
 </script>

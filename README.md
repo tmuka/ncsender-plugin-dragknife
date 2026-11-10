@@ -8,17 +8,21 @@ This plugin rewrites the program so the tip follows the path:
 - **Corners:** at a turn sharper than *Swivel above*, the spindle swings an arc around the corner so the tip turns
   in place, giving a sharp corner.
 - **Into the cut:** each cut starts at the material top and ramps to full depth along the path, so the blade lines
-  up while it's shallow.
+  up while it's shallow. A back-and-forth ramp already in the program (QuickCut's) is replaced by this one.
 - **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving.
 - **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default; each line is left commented out and marked
   "removed by Drag Knife". M5 stays.
-- **Lead-in corners (optional):** at corners sharper than *Lead in above*, the blade hops up, comes down behind the
+- **Lead-in corners (on by default; a switch turns them off):** at corners sharper than *Lead in above* (60°), the blade hops up, comes down behind the
   corner on the next line extended, and cuts into the corner along it, so it's lined up before the cut begins. That
   leaves a short tapered slit past the corner; *Keep lead-ins off* chooses the side it may go (the inside of shapes
   when cutting out parts, the outside when cutting holes). Corners on the protected side swivel instead.
   **Auto** (the default) works it out per shape: outlines are parts, a shape inside a part is a hole, a shape inside a
   hole is a part again. The dialog says when it can't (open paths, overlapping shapes, a shape crossing itself) and
-  offers the manual choice; its animation shows where the slits land with the current settings.
+  offers the manual choice.
+- **Animation:** the dialog runs the loaded program (or a sample part when none is loaded) through the processor with
+  the current settings and animates the knife, to scale, with a close-up of one corner. Slits in the waste and slits
+  into the part are coloured. Corners already rounded in the program (a CAM tool radius on an outside cut) have
+  nothing to lead into: cut on the line, or with a 0 bit diameter, to keep them sharp.
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 

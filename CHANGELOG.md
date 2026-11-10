@@ -14,5 +14,11 @@
   slits in the waste and slits into the part coloured.
 - Spindle starts (M3/M4) and S speeds are removed by default; each line is left commented out and marked
   "removed by Drag Knife"; M5 stays.
+- Lead-ins have an on/off switch and are **on** by default (above 60°). Settings saved while they were off by a 0
+  angle get the new default.
+- The animation uses the loaded program and every current setting, to scale, with a close-up of one corner; a sample
+  part when nothing is loaded.
+- A back-and-forth ramp-in at the start of a cut (QuickCut's) is dropped, so its reversals no longer become lead-ins.
+- The dialog closes after processing when there's nothing to warn about.
 - Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
   lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.

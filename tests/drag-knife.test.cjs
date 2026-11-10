@@ -4,7 +4,7 @@ const DK = require('../lib/drag-knife.cjs');
 const { compare, compareWithLeads } = require('./sim.cjs');
 
 const R = 0.25;
-const cfg = { offset: R };
+const cfg = { offset: R, leadIn: false };   // corner swivels only; lead-in tests switch them on
 const TOL = 0.02;
 
 function prog(body, units = 'G21') {
@@ -75,7 +75,7 @@ test('inch programs use the offset in inches', () => {
 });
 
 test('lifted swivels rise during the turn and still cut the right shape', () => {
-  const res = DK.process(square, { offset: R, liftAngle: 45 });
+  const res = DK.process(square, { ...cfg, liftAngle: 45 });
   assert.ok(res.stats.lifted >= 4);
   assert.match(res.text, /G3 X[-\d.]+ Y[-\d.]+ Z-0\.15 I/, 'a helical swivel up to half depth');
   const c = compare(square, res.text, R, { corners: squareCorners });
@@ -127,7 +127,7 @@ test('percent line stays first; header names the settings', () => {
 test('every line written fits Grbl, grblHAL and FluidNC: short, plain ASCII, no realtime characters', () => {
   const long = 'M3 S18000 ; Spindle on! Is it up to speed? ~ a very long comment that goes on and on past any line buffer';
   const t = ['%', long, 'G0 Z5', 'G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 F1000', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0', 'G0 Z5', 'M30'].join('\n') + '\n';
-  const res = DK.process(t, { ...cfg, leadInAngle: 60, liftAngle: 30 }, { source: 'a-really-long-file-name (copy) from quickcut rectangle profile, final ¡v2!.nc' });
+  const res = DK.process(t, { ...cfg, leadIn: true, leadInAngle: 60, liftAngle: 30 }, { source: 'a-really-long-file-name (copy) from quickcut rectangle profile, final ¡v2!.nc' });
   const orig = new Set(t.split('\n'));
   for (const l of res.text.split('\n').filter(l => !orig.has(l))) {
     assert.ok(l.length <= 79, l.length + ': ' + l);
@@ -172,12 +172,12 @@ test('spindle starts and speeds are removed; M5 and M30 stay', () => {
   assert.match(out, /^M6 T27/m);
   assert.match(out.split('\n').slice(0, 4).join('\n'), /spindle removed/);
 
-  const kept = DK.process(t, { offset: R, stripSpindle: false });
+  const kept = DK.process(t, { ...cfg, stripSpindle: false });
   assert.strictEqual(kept.stats.spindleRemoved, 0);
   assert.match(kept.text, /^M3 S18000 ; Start spindle$/m);
   // M3 in the middle of a cut stops processing only when it's kept
   const mid = prog(['G0 X0 Y0', 'G1 Z-0.3', 'M3 S1000', 'G1 X5']);
-  assert.throws(() => DK.process(mid, { offset: R, stripSpindle: false }), /in the middle of a cut/);
+  assert.throws(() => DK.process(mid, { ...cfg, stripSpindle: false }), /in the middle of a cut/);
   assert.ok(DK.process(mid, cfg).changed);
 });
 
@@ -256,6 +256,26 @@ test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
   const twice = DK.process(prog([...sq(0, 0, 20, 20), ...sq(0, 0, 20, 20)]), base);
   assert.strictEqual(twice.stats.holes, 0);
   assert.deepStrictEqual(leadsPerCut(twice.text), [4, 4]);
+});
+
+test('lead-ins are on by default; the switch turns them off; old saved settings (angle 0) get the default', () => {
+  const on = DK.process(square, { offset: R }).stats;
+  assert.ok(on.leadIns > 0, 'default lead-ins: ' + on.leadIns);
+  assert.strictEqual(DK.process(square, { offset: R, leadIn: false }).stats.leadIns, 0);
+  const old = DK.readSettings({ offset: 0.25, leadInAngle: 0, leadInLength: 11.5 });
+  assert.strictEqual(old.leadIn, true); assert.strictEqual(old.leadInAngle, 60); assert.strictEqual(old.leadInLength, 11.5);
+  assert.strictEqual(DK.readSettings({ leadIn: false, leadInAngle: 0 }).leadInAngle, 0);
+});
+
+test('a back-and-forth ramp-in (QuickCut style) is dropped, not turned into lead-ins', () => {
+  // down to Z0, zigzag 0.3 mm forward and back to depth, then a square
+  const t = prog(['G0 X0 Y0', 'G1 Z0 F100', 'G1 X0.3 Y0 Z-0.15 F500', 'G1 X0 Y0 Z-0.3', 'G1 X10 Y0', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0']);
+  const res = DK.process(t, { offset: R, leadInAngle: 60, protect: 'none' });
+  assert.strictEqual(res.stats.rampsDropped, 1);
+  assert.strictEqual(res.stats.leadIns, 4, 'only the square\'s corners lead in (the closing one too)');
+  // without lead-ins, the tip follows the wanted path, ramp included
+  const c = compare(t, DK.process(t, cfg).text, R);
+  assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
 });
 
 test('analyze says when auto can\'t decide, and what to choose', () => {
