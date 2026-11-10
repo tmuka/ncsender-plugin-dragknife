@@ -7,7 +7,8 @@ plan (decisions at the top); README.md the user guide. GPL-3.0.
 
 | File | What |
 | --- | --- |
-| `config.html` | The dialog: settings and the *Process* button. ncSender runs it inline, so `lib/drag-knife.cjs` is copied in between its `/* BEGIN */` / `/* END */` markers by `npm run inline` (`npm test` fails if the copy is stale). |
+| `config.html` | The dialog: settings, the *Process* button, the top and side views. ncSender runs it inline, so `lib/drag-knife.cjs` and the unit library are copied in between their `/* BEGIN */` / `/* END */` markers by `npm run inline` (`npm test` fails if a copy is stale). |
+| `ncsender-unit-input` | The length fields' units (`1/4"`, `6mm`): tmuka/ncsender-unit-input, a dev dependency pinned to a tag in package.json; its `dist/unit-input.global.js` is copied into config.html (`window.NcUnitInput`). `npm install` first. |
 | `lib/drag-knife.cjs` | Parser, cut splitter and the rewrite (`DragKnife.process(text, settings, meta)`); pure, no DOM. |
 | `tests/sim.cjs` | A G-code runner and a drag model (the tip trails the axis by the offset: a tractrix). |
 

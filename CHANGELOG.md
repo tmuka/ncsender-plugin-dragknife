@@ -22,6 +22,12 @@
 - The animation is time-based (same speed on any display) with Slow / Normal / Fast (10, 30, 60 s a run; Normal by
   default, remembered in the browser).
 - Turning off *Remove spindle starts* (on by default) shows a red warning.
+- Full-window dialog like QuickCut's: settings on the left, the views on the right (one column when narrow).
+- A side view: one lead-in corner in 3D, exaggerated, with the holder, the trailing blade, the hop and the slit, and
+  what each step is for.
+- Length fields take any unit through the ncsender-unit-input library (`1/4"`, `6mm`, `2mm+1/16"`) and show the
+  operator's units.
+- A *Blade* picker: 30° or 45° (0.25 mm offset, the default) or 60° (0.5 mm), setting the lead-in and ramp to suit.
 - The dialog closes after processing when there's nothing to warn about.
 - Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
   lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.

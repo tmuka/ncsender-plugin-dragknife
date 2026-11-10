@@ -5,10 +5,29 @@
     --dk-ok: color-mix(in srgb, var(--color-success, #2e9e6b) 70%, var(--color-text-primary));
     --dk-warn: color-mix(in srgb, var(--color-warning, #d9a441) 38%, var(--color-text-primary));
     --dk-btn-bg: color-mix(in srgb, var(--color-accent) 70%, #000);
-    width: min(720px, calc(100vw - 48px)); box-sizing: border-box;
-    display: flex; flex-direction: column; gap: 14px; padding: 4px 2px;
+    /* Full window, like QuickCut: 24 px clear all round. */
+    width: calc(100vw - 48px); height: calc(100vh - 48px); box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; overflow: hidden;
     color: var(--color-text-primary); font-size: 0.9rem;
   }
+  .plugin-dialog-container:has(.dk-wrapper) { max-height: none !important; max-width: none !important; }
+  .dk-head { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; flex: none; }
+  .dk-head-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .dk-title { margin: 0 !important; font-size: 1.15rem !important; font-weight: 700 !important; color: var(--color-text-primary) !important; }
+  .dk-loaded { flex: 1 1 220px; min-width: 0; }
+  .dk-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(340px, 1fr) minmax(400px, 1.25fr); gap: 12px; }
+  .dk-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+  @media (max-width: 900px) {
+    .dk-wrapper { overflow-y: auto; }
+    .dk-body { display: flex; flex-direction: column; flex: none; }
+    .dk-col { overflow: visible; }
+  }
+  .dk-views .dk-demo svg#dk-demo-svg { width: min(100%, 420px); max-height: 340px; }
+  .dk-side { display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; }
+  .dk-side svg { width: 100%; max-height: 360px; height: auto; display: block; }
+  .dk-side-say { font-size: 0.85rem; color: var(--color-text-secondary); min-height: 2.8em; display: flex; flex-direction: column; gap: 2px; }
+  .dk-side-say b { color: var(--color-text-primary); font-weight: 600; }
+  .dk-wrapper code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.9em; }
   .dk-card { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
   .dk-card-title { margin: 0 !important; font-size: 1rem !important; font-weight: 600 !important; color: var(--color-text-primary) !important; }
   .dk-wrapper p { margin: 0 !important; line-height: 1.45 !important; }
@@ -60,24 +79,33 @@
 </style>
 
 <div class="dk-wrapper">
-  <section class="dk-card">
-    <h3 class="dk-card-title">Process the loaded program</h3>
+  <header class="dk-head">
+    <div class="dk-head-row">
+      <h3 class="dk-title">Drag Knife</h3>
+      <div class="dk-loaded">Loaded: <span class="dk-file" id="dk-file">…</span></div>
+      <div class="dk-actions">
+        <button type="button" class="dk-btn" id="dk-run" disabled>Process for drag knife</button>
+        <button type="button" class="dk-btn dk-ghost" id="dk-close">Close</button>
+      </div>
+    </div>
     <p class="dk-note">Rewrites the loaded program for a drag knife: the spindle runs ahead of the blade tip by the
       blade offset, swings around each sharp corner so the tip turns in place, and ramps into each cut so the blade
       lines up before full depth. The program should describe the cut you want, with Z0 on the top of the material.</p>
-    <div>Loaded: <span class="dk-file" id="dk-file">…</span></div>
-    <div class="dk-actions">
-      <button type="button" class="dk-btn" id="dk-run" disabled>Process for drag knife</button>
-      <button type="button" class="dk-btn dk-ghost" id="dk-close">Close</button>
-    </div>
     <div class="dk-note" id="dk-result" aria-live="polite"></div>
-  </section>
-
-  <section class="dk-card">
+  </header>
+  <div class="dk-body">
+    <div class="dk-col">
+<section class="dk-card">
     <h3 class="dk-card-title">Knife settings</h3>
     <div class="dk-sub">Blade</div>
     <div class="dk-grid">
-      <div class="dk-field"><label for="dk-offset">Blade offset (mm)</label><input class="dk-input" id="dk-offset" inputmode="decimal"
+      <div class="dk-field" style="grid-column: span 2"><label for="dk-blade">Blade</label>
+        <select class="dk-input" id="dk-blade" title="Sets the blade offset, and the lead-in and ramp lengths that suit it. Values are the usual ones for these blades; check yours (your holder's maker may give a different offset).">
+          <option value="45">30° or 45° blade: vinyl, paper (0.25 mm)</option>
+          <option value="60">60° blade: thick card, leather (0.5 mm)</option>
+          <option value="custom">Custom</option>
+        </select></div>
+      <div class="dk-field"><label for="dk-offset">Blade offset (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-offset" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="How far the blade tip trails behind the center of the holder. About 0.25 mm for a 45° blade and 0.5 mm for a 60° blade; the right value gives the sharpest corners."></div>
       <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" inputmode="decimal"
         title="Turns sharper than this get a swivel: the holder swings around the corner so the tip turns in place. Gentler turns are left to drag."></div>
@@ -89,9 +117,9 @@
       <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span></label>
     <div class="dk-sub">Into and out of each cut</div>
     <div class="dk-grid">
-      <div class="dk-field"><label for="dk-rampLength">Ramp in over (mm)</label><input class="dk-input" id="dk-rampLength" inputmode="decimal"
+      <div class="dk-field"><label for="dk-rampLength">Ramp in over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-rampLength" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="Each cut starts at the material top and reaches full depth over this distance along the path, so the blade lines up while shallow. Closed shapes recut this stretch at full depth at the end. 0 plunges straight down."></div>
-      <div class="dk-field"><label for="dk-liftOut">Lift out over (mm)</label><input class="dk-input" id="dk-liftOut" inputmode="decimal"
+      <div class="dk-field"><label for="dk-liftOut">Lift out over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftOut" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="Closed shapes rise to the material top over this distance while still moving forward, over the recut stretch. 0 lifts straight up."></div>
     </div>
     <label class="dk-check dk-sub-check"><input type="checkbox" id="dk-leadIn">
@@ -99,9 +127,9 @@
     <div class="dk-grid" id="dk-leadIn-fields">
       <div class="dk-field"><label for="dk-leadInAngle">Lead in above (°)</label><input class="dk-input" id="dk-leadInAngle" inputmode="decimal"
         title="Turns sharper than this hop up and come back down behind the corner, on the next line extended, then cut into the corner along it, so the blade is already lined up when the cut begins. 0 turns them off too."></div>
-      <div class="dk-field"><label for="dk-leadInLength">Lead-in length (mm)</label><input class="dk-input" id="dk-leadInLength" inputmode="decimal"
+      <div class="dk-field"><label for="dk-leadInLength">Lead-in length (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-leadInLength" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="How far behind the corner the lead-in starts. The blade ramps from the material top to full depth over this, so it lines up while shallow. A few times the blade offset."></div>
-      <div class="dk-field"><label for="dk-hopHeight">Hop height (mm)</label><input class="dk-input" id="dk-hopHeight" inputmode="decimal"
+      <div class="dk-field"><label for="dk-hopHeight">Hop height (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-hopHeight" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="How high above the material top the blade travels from the corner to the lead-in start."></div>
       <div class="dk-field" style="grid-column: span 2"><label for="dk-protect">Keep lead-ins off</label>
         <select class="dk-input" id="dk-protect" title="A lead-in cuts a short tapered slit on the next line extended past the corner: outside the shape at outside corners, into it at inside (notch) corners. Choose the side that's your part; corners whose lead-in would cut it swivel instead. Auto treats a shape inside another as a hole (and a shape inside a hole as a part again).">
@@ -112,6 +140,22 @@
         </select></div>
     </div>
     <div class="dk-auto" id="dk-auto" hidden aria-live="polite"></div>
+    <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
+    <div class="dk-sub">Lift at sharp corners (thick material)</div>
+    <div class="dk-grid">
+      <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" inputmode="decimal"
+        title="Turns sharper than this rise partway during the swivel, so the blade turns with less drag, then ramp back to depth. 0 turns it off (best for thin vinyl and paper)."></div>
+      <div class="dk-field"><label for="dk-liftFraction">Lift height (%)</label><input class="dk-input" id="dk-liftFraction" inputmode="decimal"
+        title="How far toward the material top the blade rises during a lifted swivel, as a percentage of the depth."></div>
+      <div class="dk-field"><label for="dk-liftRamp">Back to depth over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftRamp" type="text" data-unit="length" data-min="0" inputmode="decimal"
+        title="After a lifted swivel, the distance over which the blade goes back to full depth."></div>
+    </div>
+    <div class="dk-hint">Lengths are in your units preference; type either kind (<code>1/4"</code>, <code>6mm</code>, <code>2mm+1/16"</code>). They're converted for the program's units.</div>
+  </section>
+    </div>
+    <div class="dk-col dk-views">
+    <section class="dk-card">
+      <h3 class="dk-card-title">Top view</h3>
     <div class="dk-demo">
       <svg id="dk-demo-svg" viewBox="0 0 10 10" role="img" aria-label="Animation: the knife cutting with these settings"></svg>
       <figure class="dk-zoom" id="dk-zoom" hidden>
@@ -133,18 +177,17 @@
         </div>
       </div>
     </div>
-    <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
-    <div class="dk-sub">Lift at sharp corners (thick material)</div>
-    <div class="dk-grid">
-      <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" inputmode="decimal"
-        title="Turns sharper than this rise partway during the swivel, so the blade turns with less drag, then ramp back to depth. 0 turns it off (best for thin vinyl and paper)."></div>
-      <div class="dk-field"><label for="dk-liftFraction">Lift height (%)</label><input class="dk-input" id="dk-liftFraction" inputmode="decimal"
-        title="How far toward the material top the blade rises during a lifted swivel, as a percentage of the depth."></div>
-      <div class="dk-field"><label for="dk-liftRamp">Back to depth over (mm)</label><input class="dk-input" id="dk-liftRamp" inputmode="decimal"
-        title="After a lifted swivel, the distance over which the blade goes back to full depth."></div>
+    </section>
+    <section class="dk-card">
+      <h3 class="dk-card-title">Side view: one lead-in corner, exaggerated</h3>
+      <div class="dk-side">
+        <svg id="dk-side-svg" viewBox="0 0 400 260" role="img" aria-label="Animation: a drag knife hopping and leading into a corner, seen from the side"></svg>
+        <div class="dk-side-say"><b id="dk-side-phase">…</b><span id="dk-side-detail"></span></div>
+      </div>
+      <div class="dk-hint">A big blade offset and deep cut so the motion shows: the holder (cylinder) leads, the blade tip trails it by the offset and swings into line during the ramp-in. Your hop height and lead-in length set the shape; the sizes are scaled up.</div>
+    </section>
     </div>
-    <div class="dk-hint">Lengths are in mm whatever the program's units; they're converted for inch programs.</div>
-  </section>
+  </div>
 </div>
 
 <script>
@@ -161,6 +204,293 @@
   })();
   function $(id) { return ROOT.querySelector('#' + id); }
 
+/* BEGIN ncsender-unit-input */
+// Generated from src/unit-input.js by build.mjs: edit that, then npm run build.
+var NcUnitInput = (function () {
+/**
+ * Unit-aware number fields for ncSender plugins (from QuickCut).
+ *
+ * Plugins keep lengths in mm and show them in the machine's units (inches
+ * when ncSender's unitsPreference is 'imperial'). An operator can type a
+ * value in either unit and it is converted:
+ *   6.35        -> 6.35 (no unit: already in the machine's units)
+ *   math too: 8mm*2  4+6  1in+4mm  (1/4"+2mm)/2
+ *   .25in  .25"  1/4"  1-1/2"  1 1/2 in  6.35mm  0.635cm
+ *   feeds also: 100ipm  100 in/min  2540 mm/min  1500mm/m
+ *               42.333mm/s  1.667ips  (per second -> per minute)
+ *
+ * Written as plain ES5 functions so the same text can be pasted into a
+ * plugin's config.html (dist/unit-input.global.js), required from Node
+ * (dist/unit-input.cjs) or imported and bundled (this file).
+ */
+
+var MM_PER_INCH = 25.4;
+
+// What's typed into a length or feed field, in mm or inches whatever the
+// machine uses, as a number in the machine's units (inches when imperial,
+// else mm): 6.35, 1/4", 1-1/2 in, 6.35mm, 0.635cm; feeds also 100ipm,
+// 2540 mm/min, 1.667ips. No unit means the machine's units already. null
+// when it can't be read. QuickCut's parser (parseUnitQuantity), plus
+// simple math from Spoilboard Toolbox (parseUnitMath) when it isn't a single value.
+function parseUnitValue(text, isImperial, kind) {
+  // A decimal comma (1,5mm, ,25in) reads as a point, but not one before
+  // exactly three digits: 1,000 or 2,540 may be a thousands separator, and
+  // 1 or 2.54 instead would be quietly wrong, so that's unreadable. After a
+  // 0 (0,125) it can only be a decimal.
+  text = String(text == null ? '' : text);
+  if (THOUSANDS.test(text)) return null;
+  text = text.replace(/,/g, '.');
+  var one = parseUnitQuantity(text, isImperial, kind);
+  return one !== null ? one : parseUnitMath(text, isImperial, kind);
+}
+// Why parseUnitValue can't read text, when it's a comma before exactly three
+// digits: a message to show the operator, e.g. "1,000 could be 1000 or
+// 1.000: write 1000, or 1,0 for a decimal". null otherwise.
+function unitValueProblem(text) {
+  var m = THOUSANDS.exec(String(text == null ? '' : text));
+  if (!m) return null;
+  // The decimal with the comma shortened (1,0), or with a point when it can't be (1.125).
+  var short = m[3].replace(/0+$/, '') || '0';
+  return m[2] + ',' + m[3] + ' could be ' + m[2] + m[3] + ' or ' + m[2] + '.' + m[3] + ': write ' + m[2] + m[3] + ', or ' +
+    (short.length < 3 ? m[2] + ',' + short : m[2] + '.' + m[3]) + ' for a decimal';
+}
+// A comma that may be a thousands separator: digits not starting with 0, a
+// comma, exactly three digits.
+var THOUSANDS = /(^|[^\d])([1-9]\d*),(\d{3})(?!\d)/;
+// mm per unit (per minute for feeds) of the units a field takes.
+function unitMmPer(kind) {
+  var MM_PER = { mm: 1, cm: 10, 'in': 25.4, inch: 25.4, inches: 25.4, '"': 25.4 };
+  if (kind === 'feed') {
+    // Per minute (what G94 feeds use); "/m" is read as per minute.
+    MM_PER['mm/min'] = 1;
+    MM_PER['mm/m'] = 1;
+    MM_PER['in/min'] = 25.4;
+    MM_PER['in/m'] = 25.4;
+    MM_PER['inch/min'] = 25.4;
+    MM_PER.ipm = 25.4;
+    // Per second, scaled to per minute.
+    MM_PER['mm/s'] = 60;
+    MM_PER['mm/sec'] = 60;
+    MM_PER['in/s'] = 25.4 * 60;
+    MM_PER['in/sec'] = 25.4 * 60;
+    MM_PER.ips = 25.4 * 60;
+  }
+  return MM_PER;
+}
+// Simple math in a field, as CAD tools allow: + - * / and brackets, each
+// number with or without a unit: 8mm*2, 4+6, 1in+4mm, (1/4"+2mm)/2. A
+// number without a unit is in the machine's units when added or
+// subtracted, else a plain factor. null when it can't be read, or for a
+// length times a length or anything divided by a length or by 0.
+function parseUnitMath(text, isImperial, kind) {
+  var s = String(text == null ? '' : text).trim().toLowerCase().replace(/[”″]/g, '"').replace(/''/g, '"');
+  var per = unitMmPer(kind), k = isImperial ? 25.4 : 1, i = 0;
+  var ws = function() { while (s[i] === ' ') i++; };
+  // A number, a fraction (1/4) and a unit: { v: mm, or the bare number;
+  // d: 1 for a length (or feed), 0 for a plain number }.
+  var quantity = function() {
+    var m = /^(?:(\d+)\/(\d+)(?![\d.])|(\d+(?:\.\d*)?|\.\d+))\s*([a-z"]+(?:\/[a-z]+)?)?/.exec(s.slice(i));
+    if (!m || +m[2] === 0) return null;
+    i += m[0].length;
+    var v = m[1] != null ? m[1] / m[2] : parseFloat(m[3]);
+    if (!m[4]) return { v: v, d: 0 };
+    return Object.prototype.hasOwnProperty.call(per, m[4]) ? { v: v * per[m[4]], d: 1 } : null;
+  };
+  var expr;
+  var factor = function(signed) {
+    ws();
+    if (!signed && (s[i] === '-' || s[i] === '+')) {
+      var neg = s[i++] === '-', f = factor(true);
+      return f && { v: neg ? -f.v : f.v, d: f.d };
+    }
+    if (s[i] !== '(') return quantity();
+    i++;
+    var e = expr();
+    ws();
+    if (!e || s[i] !== ')') return null;
+    i++;
+    return e;
+  };
+  var term = function() {
+    var a = factor();
+    for (;;) {
+      ws();
+      var op = s[i];
+      if (op !== '*' && op !== '/') return a;
+      i++;
+      var b = factor();
+      if (!a || !b) return null;
+      if (op === '*') { if (a.d + b.d > 1) return null; a = { v: a.v * b.v, d: a.d + b.d }; }
+      else { if (b.d || b.v === 0) return null; a = { v: a.v / b.v, d: a.d }; }
+    }
+  };
+  expr = function() {
+    var a = term();
+    for (;;) {
+      ws();
+      var op = s[i];
+      if (op !== '+' && op !== '-') return a;
+      i++;
+      var b = term();
+      if (!a || !b) return null;
+      if (a.d !== b.d) { if (a.d) b = { v: b.v * k, d: 1 }; else a = { v: a.v * k, d: 1 }; }
+      a = { v: op === '+' ? a.v + b.v : a.v - b.v, d: a.d };
+    }
+  };
+  var r = expr();
+  ws();
+  if (!r || i < s.length || !isFinite(r.v)) return null;
+  return parseFloat((r.d ? r.v / k : r.v).toFixed(isImperial ? 4 : 3));
+}
+function parseUnitQuantity(text, isImperial, kind) {
+  var t = String(text == null ? '' : text).trim().toLowerCase()
+    .replace(/[”″]/g, '"').replace(/''/g, '"');
+  var m = t.match(/^([+-])?\s*(\d+(?:\.\d*)?|\.\d+)(?:(?:\s+|-)(\d+)\/(\d+)|\/(\d+))?\s*([a-z"/]*)$/);
+  if (!m) return null;
+  var whole = parseFloat(m[2]);
+  var value;
+  if (m[3] != null) {
+    // Mixed number: 1-1/2 or 1 1/2. The whole part must be an integer.
+    if (/\./.test(m[2]) || +m[4] === 0) return null;
+    value = whole + (+m[3]) / (+m[4]);
+  } else if (m[5] != null) {
+    // Plain fraction: 1/4.
+    if (/\./.test(m[2]) || +m[5] === 0) return null;
+    value = whole / (+m[5]);
+  } else {
+    value = whole;
+  }
+  if (m[1] === '-') value = -value;
+
+  var MM_PER = unitMmPer(kind);
+  var unit = m[6];
+  if (!unit) return value;
+  if (!Object.prototype.hasOwnProperty.call(MM_PER, unit)) return null;
+  var mm = value * MM_PER[unit];
+  var out = isImperial ? mm / 25.4 : mm;
+  return parseFloat(out.toFixed(isImperial ? 4 : 3));
+}
+
+/** Rounds for showing: 4 decimals in inches (sub-thou), 3 in mm. */
+function roundDisplay(v, isImperial) {
+  return parseFloat(v.toFixed(isImperial ? 4 : 3));
+}
+
+/** mm to the active units (not rounded). */
+function mmToDisplay(mm, isImperial) {
+  return isImperial ? mm / MM_PER_INCH : mm;
+}
+
+/**
+ * The active units back to mm. In inches it gives the shortest mm number
+ * that shows as the same inches, so a value that started in mm comes back
+ * as it was (6 mm shows as 0.2362 in and returns as 6, not 5.99948), and
+ * a real inch value stays exact (0.25 in is 6.35).
+ */
+function displayToMm(val, isImperial) {
+  if (!isImperial) return val;
+  var mm = val * MM_PER_INCH, shown = roundDisplay(val, true);
+  for (var d = 0; d <= 4; d++) {
+    var r = parseFloat(mm.toFixed(d));
+    if (roundDisplay(r / MM_PER_INCH, true) === shown) return r;
+  }
+  return mm;
+}
+
+/** A mm value as field text in the active units: 6 -> "6" or "0.2362". */
+function formatMm(mm, isImperial) {
+  return String(roundDisplay(mmToDisplay(mm, isImperial), isImperial));
+}
+
+/**
+ * Typed text to mm (lengths) or mm/min (feeds), whatever unit was typed;
+ * a plain number is in the active units. null when unreadable.
+ */
+function textToMm(text, isImperial, kind) {
+  var v = parseUnitValue(text, isImperial, kind);
+  return v == null ? null : displayToMm(v, isImperial);
+}
+
+/**
+ * A default given in mm, snapped to a round inch size for an imperial
+ * machine: 0.005 under 1/16, then 1/16 under 1, 1/8 under 4, 1/2 above
+ * (so 3 mm shows as 0.125, not 0.1181).
+ */
+function roundInches(inch) {
+  var a = Math.abs(inch), step = a < 0.0625 ? 0.005 : a < 1 ? 1 / 16 : a < 4 ? 1 / 8 : 1 / 2;
+  return a ? Math.sign(inch) * Math.max(step, Math.round(a / step) * step) : 0;
+}
+
+/**
+ * Makes every field under `root` that has a data-unit attribute
+ * ("length" or "feed") work like QuickCut's:
+ * - Leaving it (or Enter) rewrites what was typed as a plain number in the
+ *   active units ("6mm" -> 0.2362 on an inch machine) and fires `input`.
+ *   It listens for blur (not focusout, which fires after the field's own
+ *   blur) in the capture phase on root, so the plugin's own blur,
+ *   focusout and Enter handlers see the plain number.
+ * - Up / Down step the value like Chrome DevTools: 1, Shift 10, Alt
+ *   (Option) 0.1, Ctrl (Command) 0.001, in the field's units. A step never
+ *   goes under the field's min (data-min or min): it stops at a whole
+ *   minimum and doesn't move for an odd one. data-integer steps by 1 or
+ *   more. Each step fires `input`, then calls opts.onStep(el).
+ * Fields should be type="text" (a number input drops 1/4" before JS sees
+ * it). opts.imperial: a boolean, or a function read each time.
+ * Returns a function that removes the listeners.
+ */
+function wireUnitFields(root, opts) {
+  opts = opts || {};
+  function imperial() {
+    return typeof opts.imperial === 'function' ? !!opts.imperial() : !!opts.imperial;
+  }
+  function unitField(el) {
+    return el && el.getAttribute && el.tagName === 'INPUT' && el.getAttribute('data-unit') ? el : null;
+  }
+  function normalize(el) {
+    var v = parseUnitValue(el.value, imperial(), el.getAttribute('data-unit'));
+    if (v == null || String(v) === el.value.trim()) return;
+    el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function onBlur(evt) {
+    var el = unitField(evt.target);
+    if (el) normalize(el);
+  }
+  function onKeyDown(evt) {
+    var el = unitField(evt.target);
+    if (!el || el.disabled || el.readOnly) return;
+    if (evt.key === 'Enter') { normalize(el); return; }
+    if (opts.arrows === false || (evt.key !== 'ArrowUp' && evt.key !== 'ArrowDown')) return;
+    var imp = imperial();
+    var current = parseUnitValue(el.value, imp, el.getAttribute('data-unit'));
+    if (current == null || !isFinite(current)) current = 0;
+    var step = evt.ctrlKey || evt.metaKey ? 0.001 : (evt.shiftKey ? 10 : (evt.altKey ? 0.1 : 1));
+    if (el.hasAttribute('data-integer')) step = Math.max(1, step);
+    var next = current + (evt.key === 'ArrowUp' ? step : -step);
+    var min = parseFloat(el.getAttribute('data-min') != null ? el.getAttribute('data-min') : el.getAttribute('min'));
+    if (isFinite(min) && next < min) {
+      if (!Number.isInteger(min)) { evt.preventDefault(); return; }
+      next = min;
+    }
+    next = parseFloat(next.toFixed(imp ? 4 : 3));
+    evt.preventDefault();
+    if (String(next) === el.value) return;
+    el.value = next;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    if (opts.onStep) opts.onStep(el);
+  }
+  root.addEventListener('blur', onBlur, true);
+  root.addEventListener('keydown', onKeyDown, true);
+  return function unwire() {
+    root.removeEventListener('blur', onBlur, true);
+    root.removeEventListener('keydown', onKeyDown, true);
+  };
+}
+
+return { MM_PER_INCH: MM_PER_INCH, parseUnitValue: parseUnitValue, unitValueProblem: unitValueProblem, unitMmPer: unitMmPer, parseUnitMath: parseUnitMath, parseUnitQuantity: parseUnitQuantity, roundDisplay: roundDisplay, mmToDisplay: mmToDisplay, displayToMm: displayToMm, formatMm: formatMm, textToMm: textToMm, roundInches: roundInches, wireUnitFields: wireUnitFields };
+})();
+if (typeof window !== 'undefined') window.NcUnitInput = NcUnitInput;
+/* END ncsender-unit-input */
 /* BEGIN lib/drag-knife.cjs */
 // Drag knife post-processor: rewrites a program written for the blade TIP into
 // the path the spindle AXIS must follow, given the blade's offset (the tip
@@ -878,19 +1208,62 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function stored(k, val) { return k === 'liftFraction' ? val / 100 : val; }
 
   var cfg = DragKnife.readSettings(initialConfig && typeof initialConfig === 'object' ? initialConfig : {});
+  // Lengths are stored in mm and shown in the operator's units (ncSender's unitsPreference),
+  // read by the ncsender-unit-input library: 1/4", 6mm, 2mm+1/16" all work.
+  var NU = NcUnitInput, imperial = false;
+  var LENGTHS = { offset: 1, rampLength: 1, liftOut: 1, leadInLength: 1, hopHeight: 1, liftRamp: 1 };
+  function showField(k) {
+    var el = $('dk-' + k);
+    el.value = LENGTHS[k] ? NU.formatMm(cfg[k], imperial) : String(shown(k, cfg[k]));
+    el.classList.remove('dk-bad'); el.removeAttribute('aria-invalid');
+  }
+  function showUnits() {
+    ROOT.querySelectorAll('.dk-unit').forEach(function(u) { u.textContent = imperial ? 'in' : 'mm'; });
+    Object.keys(LENGTHS).forEach(showField);
+  }
   FIELDS.forEach(function(k) {
     var el = $('dk-' + k);
-    el.value = String(shown(k, cfg[k]));
-    el.addEventListener('change', function() {
-      var n = Number(String(el.value).replace(',', '.').trim());
-      var bad = !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (k === 'liftFraction' && n > 100);
+    showField(k);
+    // Each value is committed once, however it's left (Enter, Tab, a tap elsewhere).
+    function commit() {
+      var n, problem = null;
+      if (LENGTHS[k]) { n = NU.textToMm(el.value, imperial); if (n === null) problem = NU.unitValueProblem(el.value) || 'not a length'; }
+      else n = Number(String(el.value).replace(',', '.').trim());
+      var bad = n === null || !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (k === 'liftFraction' && n > 100);
       el.classList.toggle('dk-bad', bad);
-      if (bad) return;
-      cfg[k] = stored(k, n);
+      if (bad) { el.setAttribute('aria-invalid', 'true'); el.title = problem || el.title; return; }
+      el.removeAttribute('aria-invalid');
+      var v = stored(k, n);
+      if (Math.abs(v - cfg[k]) < 1e-9) return;
+      cfg[k] = v;
       save();
       if (k === 'leadInAngle' || k === 'swivelAngle' || k === 'surfaceZ') checkAuto();
-      demo();
-    });
+      demo(); side();
+    }
+    el.addEventListener('focusout', commit);
+    el.addEventListener('change', commit);
+    el.addEventListener('keydown', function(e) { if (e.key === 'Enter') commit(); });
+  });
+  NU.wireUnitFields(ROOT, { imperial: function() { return imperial; } });
+  fetch(BASE_URL + '/api/settings').then(function(r) { return r.ok ? r.json() : {}; }).then(function(st) {
+    imperial = (st && st.unitsPreference || 'metric') === 'imperial';
+    showUnits();
+  }).catch(function() { showUnits(); });
+  // Blade presets: the usual offsets, with a lead-in about 6 and a ramp about 8 offsets long.
+  var BLADES = { '45': { offset: 0.25, leadInLength: 1.5, rampLength: 2 }, '60': { offset: 0.5, leadInLength: 3, rampLength: 4 } };
+  var blade = $('dk-blade');
+  function bladeShown() {
+    var match = 'custom';
+    Object.keys(BLADES).forEach(function(b) { var p = BLADES[b]; if (Object.keys(p).every(function(k) { return Math.abs(cfg[k] - p[k]) < 1e-6; })) match = b; });
+    blade.value = match;
+  }
+  bladeShown();
+  ROOT.addEventListener('focusout', function(e) { if (e.target.matches && e.target.matches('#dk-offset, #dk-leadInLength, #dk-rampLength')) setTimeout(bladeShown, 0); });
+  blade.addEventListener('change', function() {
+    var p = BLADES[blade.value];
+    if (!p) return;
+    Object.keys(p).forEach(function(k) { cfg[k] = p[k]; showField(k); });
+    save(); checkAuto(); demo(); side();
   });
   var protect = $('dk-protect');
   protect.value = cfg.protect;
@@ -911,7 +1284,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   leadIn.addEventListener('change', function() {
     cfg.leadIn = leadIn.checked;
     if (cfg.leadIn && !(cfg.leadInAngle > 0)) { cfg.leadInAngle = DragKnife.DEFAULTS.leadInAngle; $('dk-leadInAngle').value = String(cfg.leadInAngle); }
-    save(); leadInShown(); checkAuto(); demo();
+    save(); leadInShown(); checkAuto(); demo(); side();
   });
   function save() {
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
@@ -998,6 +1371,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       try { localStorage.setItem('dk-demo-speed', String(demoDur)); } catch (e) {}
       speedShown();
       if (demoProgress) demoProgress.retime();
+      side();
     });
   });
   speedShown();
@@ -1107,10 +1481,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       zsvg.setAttribute('viewBox', [zoomAt.x - zoomW / 2, -(zoomAt.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' '));
       el('use', { href: '#dk-demo-scene' }, zsvg);
       knives.push(knife(zsvg, R));
-      $('dk-zoom-cap').textContent = 'A corner up close, to scale (' + Math.round(zoomW / k * 10) / 10 + ' mm across)';
+      $('dk-zoom-cap').textContent = 'A corner up close, to scale (' + lengthSay(zoomW / k) + ' across)';
     }
     $('dk-demo-title').innerHTML = '<b>' + esc(title) + '</b>';
-    $('dk-demo-scale').textContent = 'Circle: the knife holder (hollow while hopping)' + (showR > R * 1.05 ? ', drawn larger than the ' + cfg.offset + ' mm offset so it shows.' : ', to scale.');
+    $('dk-demo-scale').textContent = 'Circle: the knife holder (hollow while hopping)' + (showR > R * 1.05 ? ', drawn larger than the ' + lengthSay(cfg.offset) + ' offset so it shows.' : ', to scale.');
     var s = done ? null : res.stats;
     $('dk-demo-stats').textContent = (problem ? problem + ' ' : '') + (done ? 'Load the original to see these settings on it.'
       : (cfg.leadIn ? plural(s.leadIns, 'lead-in') + ', ' + plural(s.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(s.holes, 'hole') + ' found' : '') + '.'
@@ -1167,6 +1541,125 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         svg.setAttribute('data-done', '1');
         setTimeout(function() { if (run === demoRun && ROOT.isConnected) demo(); }, 4000);   // hold the finished picture, then again
       }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- the side view: one corner with a lead-in, in 3D, sizes exaggerated ----
+  // The real processor on a straight cut that turns left; the blade offset is
+  // drawn 4 units and the lead-in, hop and ramp keep their sizes relative to it.
+  var sideRun = 0;
+  function lengthSay(mm) { return NU.formatMm(mm, imperial) + (imperial ? ' in' : ' mm'); }
+  function side() {
+    var svg = $('dk-side-svg');
+    if (!svg) return;
+    var run = ++sideRun;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.removeAttribute('data-done');
+    var R = 4, zoom = R / Math.max(cfg.offset, 0.01);
+    function clampRel(mm, lo, hi) { return Math.max(lo * R, Math.min(hi * R, mm * zoom)); }
+    var D = 2.4, L = clampRel(cfg.leadInLength, 2.5, 4.5), hop = clampRel(cfg.hopHeight, 1, 2.2), ramp = clampRel(cfg.rampLength, 1.5, 3);
+    var A = 22, B = 18;   // first side along +X, then the turn: up +Y
+    var prog = ['G21 G90 G17', 'G0 Z10', 'G0 X0 Y0', 'G1 Z-' + D + ' F300', 'G1 X' + A + ' Y0 F1000', 'G1 X' + A + ' Y' + B, 'G0 Z10', 'M30'].join('\n') + '\n';
+    var set = { offset: R, swivelAngle: cfg.swivelAngle, surfaceZ: 0, rampLength: ramp, liftOut: 0, liftAngle: 0, stripSpindle: true,
+      leadIn: true, leadInAngle: 45, leadInLength: L, hopHeight: hop, protect: 'none' };
+    var res; try { res = DragKnife.process(prog, set); } catch (e) { return; }
+    var all = DragKnife.dragTip(DragKnife.trace(res.text, 0.15), R, 0);
+    var first = all.findIndex(function(p) { return p.z < hop + 2; }), last = all.length - 1;
+    while (last > 0 && !all[last].cut) last--;
+    var samples = all.slice(Math.max(0, first), Math.min(all.length, last + 40));
+
+    // camera: turned and tilted, looking down a little from the front left
+    var az = -32 * Math.PI / 180, el3 = 24 * Math.PI / 180, ZS = 1.6;   // ZS: Z drawn taller still
+    function P(x, y, z) {
+      var u = x * Math.cos(az) + y * Math.sin(az), w = -x * Math.sin(az) + y * Math.cos(az);
+      return { x: u, y: -(z * ZS * Math.cos(el3) + w * Math.sin(el3)) };
+    }
+    function pts(list) { return list.map(function(q) { return q.x.toFixed(2) + ',' + q.y.toFixed(2); }).join(' '); }
+    var E = D * 1.8, H = 11, RH = R * 0.8;   // blade showing below the holder, holder height and radius
+    var sx0 = -3, sx1 = A + 7, sy0 = -L - 5, sy1 = B + 4, T = D * 2.2;
+    var slabTop = [P(sx0, sy0, 0), P(sx1, sy0, 0), P(sx1, sy1, 0), P(sx0, sy1, 0)];
+    // view box: the slab and the holder at its highest
+    var ext = slabTop.concat([P(sx0, sy0, -T), P(sx1, sy0, -T), P(sx1, sy1, -T)]);
+    samples.forEach(function(p, i) { if (i % 10 === 0) ext.push(P(p.x, p.y, p.z + E + H + 2)); });
+    var bx0 = Math.min.apply(null, ext.map(function(q) { return q.x; })) - 4, bx1 = Math.max.apply(null, ext.map(function(q) { return q.x; })) + 4;
+    var by0 = Math.min.apply(null, ext.map(function(q) { return q.y; })) - 4, by1 = Math.max.apply(null, ext.map(function(q) { return q.y; })) + 4;
+    svg.setAttribute('viewBox', [bx0, by0, bx1 - bx0, by1 - by0].map(function(n) { return n.toFixed(1); }).join(' '));
+
+    var NSS = 'non-scaling-stroke';
+    // the slab's front and right sides, then the blade, then the top (see-through, so the blade shows in the cut)
+    var front = [P(sx0, sy0, 0), P(sx1, sy0, 0), P(sx1, sy0, -T), P(sx0, sy0, -T)];
+    var right = [P(sx1, sy0, 0), P(sx1, sy1, 0), P(sx1, sy1, -T), P(sx1, sy0, -T)];
+    el('polygon', { points: pts(front), fill: 'color-mix(in srgb, var(--color-accent) 22%, var(--color-surface))', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
+    el('polygon', { points: pts(right), fill: 'color-mix(in srgb, var(--color-accent) 14%, var(--color-surface))', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
+    var bladeG = el('g', {}, svg);
+    el('polygon', { points: pts(slabTop), fill: 'color-mix(in srgb, var(--color-accent) 30%, transparent)', stroke: 'var(--color-border)', 'vector-effect': NSS }, svg);
+    // the cut you want, dashed on the top
+    el('polyline', { points: pts([P(0, 0, 0), P(A, 0, 0), P(A, B, 0)]), fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3', 'vector-effect': NSS }, svg);
+    var trail = el('g', {}, svg);
+    var axisTrail = el('polyline', { points: '', fill: 'none', stroke: 'var(--color-text-secondary)', 'stroke-width': 1, opacity: 0.6, 'vector-effect': NSS }, svg);
+    var holderG = el('g', {}, svg);
+
+    function hull(list) {
+      var a = list.slice().sort(function(p, q) { return p.x - q.x || p.y - q.y; });
+      function cr(o, p, q) { return (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x); }
+      var lo = [], up = [];
+      a.forEach(function(p) { while (lo.length > 1 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); });
+      a.slice().reverse().forEach(function(p) { while (up.length > 1 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); });
+      return lo.slice(0, -1).concat(up.slice(0, -1));
+    }
+    function ring(cx, cy, z, r) { var o = []; for (var k = 0; k < 24; k++) { var a = k * Math.PI / 12; o.push(P(cx + r * Math.cos(a), cy + r * Math.sin(a), z)); } return o; }
+    function draw(p) {
+      while (holderG.firstChild) holderG.removeChild(holderG.firstChild);
+      while (bladeG.firstChild) bladeG.removeChild(bladeG.firstChild);
+      var zb = p.z + E;   // holder bottom
+      var body = hull(ring(p.x, p.y, zb, RH).concat(ring(p.x, p.y, zb + H, RH)));
+      el('polygon', { points: pts(body), fill: 'color-mix(in srgb, var(--color-text-primary) 35%, var(--color-surface))', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'vector-effect': NSS }, holderG);
+      el('polygon', { points: pts(ring(p.x, p.y, zb + H, RH)), fill: 'color-mix(in srgb, var(--color-text-primary) 55%, var(--color-surface))', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'vector-effect': NSS }, holderG);
+      el('polyline', { points: pts(ring(p.x, p.y, zb, RH).concat([ring(p.x, p.y, zb, RH)[0]])), fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'vector-effect': NSS, opacity: 0.6 }, holderG);
+      if (p.tip) {
+        // the blade: from under the holder's centre down to the tip, which trails by the offset
+        var tri = [P(p.x, p.y, zb), P(p.x, p.y, p.z + D * 0.15), P(p.tip.x, p.tip.y, p.z)];
+        el('polygon', { points: pts(tri), fill: 'color-mix(in srgb, var(--color-text-primary) 85%, var(--dk-warn))', stroke: 'var(--color-text-primary)', 'stroke-width': 1.5, 'stroke-linejoin': 'round', 'vector-effect': NSS }, bladeG);
+        el('circle', { cx: P(p.tip.x, p.tip.y, p.z).x, cy: P(p.tip.x, p.tip.y, p.z).y, r: 0.6, fill: 'var(--dk-warn)' }, bladeG);
+      }
+    }
+    var LOOK = { cut: 'var(--dk-accent-text)', lead: 'var(--dk-warn)' };
+    var hopped = false, cur = null, curKind = null, lastTip = null, axisPts = '';
+    var i = 0, t0 = null, dur = demoDur * 0.6 * 1000;
+    function say(p, prev) {
+      var phase, detail;
+      if (!p.cut) {
+        if (prev && p.z < prev.z - 1e-6) { phase = 'Down to the material top'; detail = 'Over the lead-in start, behind the corner on the next side extended.'; }
+        else if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > 1e-6) { phase = 'Hop: back to the lead-in start'; detail = 'Lifted ' + lengthSay(cfg.hopHeight) + ' above the material while it travels.'; }
+        else { phase = hopped ? 'Hop: up out of the cut' : 'Into the first side'; detail = hopped ? 'At the corner the blade points the wrong way for the next side.' : ''; }
+      } else if (p.z > -D + 1e-3) {
+        phase = hopped ? 'Lead-in: ramping into the corner' : 'Ramping in';
+        detail = hopped ? 'The tip trails the holder and swings into line along the next side before the corner (' + lengthSay(cfg.leadInLength) + ' lead-in).' : 'The blade lines up while shallow.';
+      } else { phase = hopped ? 'Cutting the next side' : 'Cutting the first side'; detail = hopped ? 'Lined up already: the corner stays sharp.' : 'The tip trails the holder by the blade offset.'; }
+      $('dk-side-phase').textContent = phase;
+      $('dk-side-detail').textContent = detail;
+    }
+    function frame(now) {
+      if (run !== sideRun || !ROOT.isConnected) return;
+      if (t0 === null) t0 = now;
+      var upto = Math.min(samples.length, Math.max(i + 1, Math.floor((now - t0) / dur * samples.length)));
+      for (; i < upto; i++) {
+        var sm = samples[i];
+        if (!sm.cut && i > 0 && samples[i - 1].cut) hopped = true;
+        if (sm.cut && sm.tip) {
+          var kd = hopped && sm.tip.y < -0.05 ? 'lead' : 'cut';   // before the corner, on the next side extended: the slit in the waste
+          if (!cur || kd !== curKind || !lastTip) { cur = el('polyline', { points: lastTip ? pts([P(lastTip.x, lastTip.y, 0)]) : '', fill: 'none', stroke: LOOK[kd], 'stroke-width': 2.2, 'stroke-linecap': 'round', 'vector-effect': NSS }, trail); curKind = kd; }
+          cur.setAttribute('points', cur.getAttribute('points') + ' ' + pts([P(sm.tip.x, sm.tip.y, 0)]));
+          lastTip = sm.tip;
+        } else { cur = null; lastTip = null; }
+        if (i % 3 === 0) { axisPts += ' ' + pts([P(sm.x, sm.y, sm.z + E)]); }
+      }
+      axisTrail.setAttribute('points', axisPts);
+      var p = samples[Math.min(i, samples.length - 1)];
+      draw(p); say(p, samples[Math.max(0, i - 2)]);
+      if (i < samples.length) requestAnimationFrame(frame);
+      else { svg.setAttribute('data-done', '1'); setTimeout(function() { if (run === sideRun && ROOT.isConnected) side(); }, 3000); }
     }
     requestAnimationFrame(frame);
   }
@@ -1232,5 +1725,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
   readLoaded().then(function() { checkAuto(); demo(); });
+  side();
 })();
 </script>

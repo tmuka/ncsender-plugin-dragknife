@@ -19,10 +19,13 @@ This plugin rewrites the program so the tip follows the path:
   **Auto** (the default) works it out per shape: outlines are parts, a shape inside a part is a hole, a shape inside a
   hole is a part again. The dialog says when it can't (open paths, overlapping shapes, a shape crossing itself) and
   offers the manual choice.
+- **Blade:** pick 30°/45° (0.25 mm offset) or 60° (0.5 mm), or type your holder's offset. Lengths take any unit
+  (`1/4"`, `6mm`).
 - **Animation:** the dialog runs the loaded program (or a sample part when none is loaded) through the processor with
   the current settings and animates the knife, to scale, with a close-up of one corner. Slits in the waste and slits
   into the part are coloured. Corners already rounded in the program (a CAM tool radius on an outside cut) have
-  nothing to lead into: cut on the line, or with a 0 bit diameter, to keep them sharp.
+  nothing to lead into: cut on the line, or with a 0 bit diameter, to keep them sharp. A side view shows one lead-in
+  corner in 3D, exaggerated.
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 
