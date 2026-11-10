@@ -19,6 +19,14 @@
   .dk-head-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
   .dk-title { margin: 0 !important; font-size: 1.15rem !important; font-weight: 700 !important; color: var(--color-text-primary) !important; }
   .dk-loaded { flex: 1 1 220px; min-width: 0; }
+  .dk-from { font-size: 0.82rem; color: var(--color-text-secondary); margin-left: 4px; }
+  .dk-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: var(--color-text-primary); margin-left: auto; position: relative; }
+  .dk-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .dk-switch-track { width: 40px; height: 22px; border-radius: 11px; background: var(--color-border); position: relative; transition: background .15s; flex: none; }
+  .dk-switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .dk-switch input:checked + .dk-switch-track { background: var(--color-accent); }
+  .dk-switch input:checked + .dk-switch-track::after { transform: translateX(18px); }
+  .dk-switch input:focus-visible + .dk-switch-track { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .dk-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(340px, 1fr) minmax(400px, 1.25fr); gap: 12px; }
   .dk-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
   .dk-foot { flex: none; display: flex; gap: 10px 16px; align-items: center; padding: 10px 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; }
@@ -104,7 +112,9 @@
   <header class="dk-head">
     <div class="dk-head-row">
       <h3 class="dk-title">Drag Knife</h3>
-      <div class="dk-loaded">Loaded: <span class="dk-file" id="dk-file">…</span></div>
+      <div class="dk-loaded">Loaded: <span class="dk-file" id="dk-file">…</span><span class="dk-from" id="dk-file-from"></span></div>
+      <label class="dk-switch" title="Also save each processed program to File Manager › Drag Knife, and the original too when it isn’t in File Manager already, so it can be processed again later.">
+        <span>Save to File Manager</span><input type="checkbox" id="dk-saveFiles" role="switch"><span class="dk-switch-track" aria-hidden="true"></span></label>
     </div>
     <p class="dk-note">Rewrites the loaded program for a drag knife: the spindle leads the blade tip by the blade offset,
       swings or leads into sharp corners, and ramps into each cut. Z0 is the top of the material.</p>
@@ -551,6 +561,7 @@ var DragKnife = (function () {
     leadInAngle: 60,     // degrees; turns sharper than this hop up and lead back in along the next line
     leadInLength: 1.5,   // mm; the lead-in starts this far behind the corner, on the next line extended
     hopHeight: 1,        // mm above the material top while hopping to the lead-in
+    saveToFileManager: false,   // the dialog: also save results (and temporary originals) to File Manager › Drag Knife
     protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
   };
   var PROTECT = ['auto', 'inside', 'outside', 'none'];
@@ -1302,6 +1313,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function spindleShown() { $('dk-spindle-warn').hidden = strip.checked; }
   spindleShown();
   strip.addEventListener('change', function() { cfg.stripSpindle = strip.checked; save(); spindleShown(); });
+  var saveFiles = $('dk-saveFiles');
+  saveFiles.checked = !!cfg.saveToFileManager;
+  saveFiles.addEventListener('change', function() { cfg.saveToFileManager = saveFiles.checked; save(); });
   var leadIn = $('dk-leadIn');
   leadIn.checked = !!cfg.leadIn;
   function leadInShown() {
@@ -1319,17 +1333,55 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
   }
 
-  var loaded = null, program = { name: null, text: null };
+  var loaded = null, program = null;
   var PROTECT_LABEL = { inside: 'Inside of shapes', outside: 'Outside of shapes', none: 'Nothing (every corner)' };
-  async function loadProgramText() {
-    var name = loaded && loaded.filename;
-    if (!name) { program = { name: null, text: null }; return null; }
-    if (program.name === name && program.text !== null) return program.text;
+  var SAVE_FOLDER = 'Drag Knife';
+  function baseName(p) { return String(p).split('/').pop(); }
+  async function readFile(path) {
     try {
-      var r = await fetch(BASE_URL + '/api/gcode-files/current/download');
-      program = { name: name, text: r.ok ? await r.text() : null };
-    } catch (e) { program = { name: name, text: null }; }
-    return program.text;
+      var r = await fetch(BASE_URL + '/api/gcode-files/file?path=' + encodeURIComponent(path));
+      return r.ok ? (await r.json()).content : null;
+    } catch (e) { return null; }
+  }
+  // What the dialog works from. Normally the loaded program; when that's one this
+  // plugin already processed, its original from File Manager (the load names it as
+  // the source file), so it can be processed again with other settings.
+  // -> { text, name, path (File Manager, or null), processed, missing } or null
+  async function loadSource() {
+    if (!loaded || !loaded.filename) { program = null; return null; }
+    var key = loaded.filename + '|' + (loaded.loadedAt || '');
+    if (program && program.key === key) return program;
+    var p = { key: key, text: null, cur: null, name: loaded.filename, path: null, processed: false, missing: false }, cur = null;
+    try { var r = await fetch(BASE_URL + '/api/gcode-files/current/download'); cur = r.ok ? await r.text() : null; } catch (e) {}
+    p.cur = cur;
+    if (cur !== null && DragKnife.isProcessed(cur)) {
+      p.processed = true;
+      var orig = loaded.sourceFile ? await readFile(loaded.sourceFile) : null;
+      if (orig && !DragKnife.isProcessed(orig)) { p.text = orig; p.path = loaded.sourceFile; p.name = baseName(loaded.sourceFile); }
+      else p.missing = true;
+    } else {
+      p.text = cur;
+      if (!loaded.isTemporary && loaded.sourceFile) p.path = loaded.sourceFile;
+    }
+    if (key === (loaded.filename + '|' + (loaded.loadedAt || ''))) program = p;
+    return p;
+  }
+  async function loadProgramText() { var p = await loadSource(); return p ? p.text : null; }
+  // The file line and the button say what Process will start from.
+  async function showSource() {
+    var p = await loadSource(), btn = $('dk-run');
+    var busy = loaded && (loaded.status === 'running' || loaded.status === 'paused');
+    var said = $('dk-file-from');
+    if (!p) { said.textContent = ''; btn.textContent = 'Process for drag knife'; return; }
+    if (p.processed) {
+      btn.textContent = 'Process again from the original';
+      btn.disabled = p.missing || busy;
+      said.textContent = p.missing ? ' (already processed; its original isn’t in File Manager: load or generate the original again)'
+        : ' (processed from ' + p.path + ')';
+    } else {
+      btn.textContent = 'Process for drag knife';
+      said.textContent = p.path ? ' (File Manager: ' + p.path + ')' : (loaded.isTemporary ? ' (not in File Manager)' : '');
+    }
   }
   // With Auto chosen and lead-ins on, say what auto makes of the loaded program,
   // and when it can't decide, offer the manual choice instead.
@@ -1438,11 +1490,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var svg = $('dk-demo-svg');
     if (!svg) return;
     var run = ++demoRun;
-    var text = await loadProgramText(), title, src = 'loaded';
+    var source = await loadSource(), text = source && (source.missing ? source.cur : source.text), title, src = 'loaded';
     if (run !== demoRun) return;
     var done = false;
     if (text && DragKnife.isProcessed(text)) { title = 'The loaded program (already processed)'; done = true; }
-    else if (text) title = 'Your loaded program with these settings';
+    else if (text) title = source.processed ? 'The original, with these settings' : 'Your loaded program with these settings';
     var res = null, problem = '';
     if (text && !done) {
       try { res = DragKnife.process(text, cfg); if (!res.changed) { problem = 'The loaded program has no cuts below Z' + cfg.surfaceZ + '.'; res = null; } }
@@ -1708,6 +1760,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     } catch (e) { loaded = null; }
     var name = loaded && loaded.filename;
     $('dk-file').textContent = name || 'nothing loaded';
+    if (!name) $('dk-file-from').textContent = '';
     var busy = loaded && (loaded.status === 'running' || loaded.status === 'paused');
     $('dk-run').disabled = !name || busy;
     if (busy) note('warn', 'A job is ' + loaded.status + '. Process the program when it has finished.');
@@ -1729,38 +1782,66 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       await readLoaded();
       if (!loaded || !loaded.filename) throw new Error('No program is loaded.');
       if (loaded.status === 'running' || loaded.status === 'paused') throw new Error('A job is ' + loaded.status + '.');
-      var res = await fetch(BASE_URL + '/api/gcode-files/current/download');
-      if (!res.ok) throw new Error('Couldn’t read the loaded program (ncSender answered ' + res.status + ').');
-      var text = await res.text();
-      var name = loaded.filename;
-      var out = DragKnife.process(text, cfg, { source: name });
+      var src = await loadSource();
+      if (!src || src.text === null) throw new Error(src && src.missing
+        ? 'This program is already processed and its original isn’t in File Manager. Load the original (or generate it again) and process that.'
+        : 'Couldn’t read the loaded program.');
+      var name = src.name;
+      var out = DragKnife.process(src.text, cfg, { source: name });
       if (!out.changed) {
         note('warn', 'Nothing to change: the program has no cuts below Z' + esc(cfg.surfaceZ) + ' with X/Y moves. Check “Material top Z”.');
         return;
       }
       var newName = name.replace(/\.[^.\/\\]*$/, '') + '-dragknife.nc';
+      var origPath = src.path, saved = [];
+      if (cfg.saveToFileManager) {
+        // the original first, when it isn't in File Manager, so it can be processed again later
+        if (!origPath) { origPath = await freePath(SAVE_FOLDER + '/' + name, src.text); if (await saveFile(origPath, src.text)) saved.push(origPath); else origPath = null; }
+        // named after the original as saved, so processing it again replaces this result
+        if (origPath) newName = baseName(origPath).replace(/\.[^.\/\\]*$/, '') + '-dragknife.nc';
+        var outPath = SAVE_FOLDER + '/' + newName;
+        if (await saveFile(outPath, out.text)) saved.push(outPath);
+      }
       var up = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: newName, content: out.text }) });
+        body: JSON.stringify({ filename: newName, content: out.text, sourceFile: origPath || null }) });
       if (!up.ok) throw new Error('Couldn’t load the result (ncSender answered ' + up.status + ').');
+      program = null;
       var s = out.stats, warn = (s.autoProblems || []).slice();
       if (s.tightArcs) warn.push(plural(s.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (s.tightArcs === 1 ? 'it' : 'them') + '.');
       note(warn.length ? 'warn' : 'ok',
         'Loaded <span class="dk-file">' + esc(newName) + '</span>: ' + plural(s.rewritten, 'cut') + ' rewritten (' + s.closed + ' closed), ' +
         plural(s.swivels, 'corner swivel') + (s.leadIns ? ', ' + plural(s.leadIns, 'corner lead-in') + (cfg.protect === 'auto' ? ' (' + (s.holes ? plural(s.holes, 'hole') : 'no holes') + ' found)' : '') : '') + (s.lifted ? ', ' + s.lifted + ' lifted' : '') + ', program in ' + (s.units || 'mm') + '. ' +
         (s.spindleRemoved ? 'Spindle start removed from ' + plural(s.spindleRemoved, 'line') + '. ' : (cfg.stripSpindle ? '' : 'Spindle commands kept: make sure the spindle can’t start. ')) +
+        (saved.length ? 'Saved to File Manager: ' + saved.map(esc).join(', ') + '. ' : '') +
         'Check it in the preview before you run it.' + (warn.length ? '<ul><li>' + warn.map(esc).join('</li><li>') + '</li></ul>' : ''));
       if (!warn.length) { window.postMessage({ type: 'close-plugin-dialog' }, '*'); return; }   // done: the preview shows the result
       await readLoaded();
-      btn.disabled = true; // the loaded program is now the processed one
+      await showSource();
       demo();
     } catch (e) {
       note('bad', esc(e.message || String(e)));
       btn.disabled = !(loaded && loaded.filename);
+      showSource();
     }
   });
+  async function saveFile(path, content) {
+    try {
+      var r = await fetch(BASE_URL + '/api/gcode-files/file/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path, content: content }) });
+      return r.ok;
+    } catch (e) { return false; }
+  }
+  // A path for an original that doesn't overwrite a different file of the same name.
+  async function freePath(path, content) {
+    var m = path.match(/^(.*?)(\.[^.\/]*)?$/), stem = m[1], ext = m[2] || '';
+    for (var n = 1; n < 50; n++) {
+      var p = n === 1 ? path : stem + ' (' + n + ')' + ext, have = await readFile(p);
+      if (have === null || have === content) return p;
+    }
+    return stem + ' (' + Date.now() + ')' + ext;
+  }
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
-  readLoaded().then(function() { checkAuto(); demo(); });
+  readLoaded().then(function() { showSource(); checkAuto(); demo(); });
   side();
 })();
 </script>

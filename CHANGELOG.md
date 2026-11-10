@@ -29,6 +29,12 @@
 - Length fields take any unit through the ncsender-unit-input library (`1/4"`, `6mm`, `2mm+1/16"`) and show the
   operator's units.
 - A *Blade* picker: 30° or 45° (0.25 mm offset, the default) or 60° (0.5 mm), setting the lead-in and ramp to suit.
+- Processing again: the processed program is loaded with its original's File Manager path as the source, so opening
+  Drag Knife on it offers *Process again from the original* with the current settings (the top view shows the
+  original). Processing never changes the original file; a temporary original (not in File Manager) is gone once
+  processed unless saved.
+- *Save to File Manager* (top right, off by default, like QuickCut's): saves each result to File Manager › Drag Knife,
+  and a temporary original beside it (never over a different file of the same name), so it can be processed again.
 - The dialog closes after processing when there's nothing to warn about.
 - Every line it writes works on Grbl, grblHAL and FluidNC: 79 characters at most (the header is split over a few
   lines, long removed lines shortened with "..."), plain ASCII, and no `!`, `?` or `~` in comments.

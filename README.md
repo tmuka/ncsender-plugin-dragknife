@@ -29,6 +29,13 @@ This plugin rewrites the program so the tip follows the path:
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 
+## Processing again
+
+Processing doesn't change the original file: the result replaces only the loaded program. Opening Drag Knife on a
+result offers **Process again from the original**, read from File Manager, with the current settings. A program that
+isn't in File Manager (a QuickCut program not saved there) can only be processed again with **Save to File Manager**
+on: it saves the original and each result to File Manager › Drag Knife.
+
 ## Use
 
 1. Load the program for the cut. Z0 should be the top of the material, and the cut is the shape you want.
