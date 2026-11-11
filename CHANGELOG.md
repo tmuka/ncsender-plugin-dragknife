@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Preview: the holder cylinder is see-through, so the cut lines behind it show.
+
 ## 0.1.1: Preview follows the knife
 
 - Preview: zoomed in, the view follows the knife, gliding to keep the blade tip in view (it waits a moment after you zoom or pan).

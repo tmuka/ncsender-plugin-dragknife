@@ -1842,8 +1842,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       while (bladeG.firstChild) bladeG.removeChild(bladeG.firstChild);
       var zb = p.z + E;   // holder bottom
       var body = hull(ring(p.x, p.y, zb, RH).concat(ring(p.x, p.y, zb + H, RH)));
-      el('polygon', { points: pts(body), fill: 'color-mix(in srgb, var(--color-text-primary) 35%, var(--color-surface))', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'vector-effect': NSS }, holderG);
-      el('polygon', { points: pts(ring(p.x, p.y, zb + H, RH)), fill: 'color-mix(in srgb, var(--color-text-primary) 55%, var(--color-surface))', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'vector-effect': NSS }, holderG);
+      el('polygon', { points: pts(body), fill: 'color-mix(in srgb, var(--color-text-primary) 14%, transparent)', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'stroke-opacity': 0.75, 'vector-effect': NSS }, holderG);
+      el('polygon', { points: pts(ring(p.x, p.y, zb + H, RH)), fill: 'color-mix(in srgb, var(--color-text-primary) 24%, transparent)', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'stroke-opacity': 0.75, 'vector-effect': NSS }, holderG);
       el('polyline', { points: pts(ring(p.x, p.y, zb, RH).concat([ring(p.x, p.y, zb, RH)[0]])), fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 1, 'vector-effect': NSS, opacity: 0.6 }, holderG);
       if (p.tip) {
         // the blade: from under the holder's centre down to the tip, which trails by the offset
