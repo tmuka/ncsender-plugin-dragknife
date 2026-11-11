@@ -1777,7 +1777,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     // The close-up: from above, to scale, following the knife.
     var zsvg = $('dk-zoom-svg');
     while (zsvg.firstChild) zsvg.removeChild(zsvg.firstChild);
-    var zk = sc.k || 1, zR = sc.R, zoomW = Math.min(Math.max(2.6 * cfg.leadInLength * zk, 14 * zR), sc.span * 0.45);
+    // Sized from the blade offset: 5 offsets across, so the holder circle fills 40 % of it
+    // and the blade (one offset long) a fifth; not below a dozen samples (the
+    // samples, span/700 apart, get coarse below about 12 across) nor above 45 % of it.
+    var zk = sc.k || 1, zR = sc.R, zoomW = Math.min(Math.max(5 * zR, sc.span / 700 * 12), sc.span * 0.45);
     function zoomTo(p) { zsvg.setAttribute('viewBox', [p.x - zoomW / 2, -(p.y + zoomW / 2), zoomW, zoomW].map(function(n) { return n.toFixed(5); }).join(' ')); }
     var zg = el('g', { transform: 'scale(1,-1)' }, zsvg);
     if (sc.shapes.length) el('path', { d: sc.shapes.map(function(poly) { return 'M' + poly.map(function(q) { return q.x.toFixed(4) + ' ' + q.y.toFixed(4); }).join(' L') + ' Z'; }).join(' '),
