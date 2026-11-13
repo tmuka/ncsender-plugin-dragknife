@@ -55,6 +55,17 @@ slit in the waste](docs/images/corners.svg)
 - **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
   down.
 
+## Where Z0 is
+
+Under **Knife settings** › *The material*, **Z0 is** says where the loaded program's Z0 is. **Auto** (the default) reads
+the program's own note: QuickCut writes `(Z0: the top of the stock)`, and notes that say Z0 is on the bed or under the
+stock mean the bed. Without a note, a program that never cuts below Z0 is taken as Z0 on the bed. Choose **The top of
+the material** or **The bed** to say it yourself; with the bed, type **Material thickness** so Drag Knife knows where
+the top is (cuts ramp in from there). **Other** takes the material top as a Z in the program's units. The line under
+them shows the depth of cut that gives, from the loaded program: for example *Depth of cut: 0.5 mm into the material
+(deepest Z2.5, the top at Z3). 2.5 mm above the bed.* It warns when nothing cuts below the top, or when a cut goes into
+the bed.
+
 ## Works well with
 
 - **[QuickCut](https://github.com/siganberg/ncsender-plugin-quickcut)** for shapes: rectangles, circles, stars and more.

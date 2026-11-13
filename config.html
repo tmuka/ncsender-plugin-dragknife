@@ -144,6 +144,8 @@
   .dk-knife-row .dk-btn { min-height: 34px; padding: 4px 12px !important; }
   .dk-knife-row .dk-input { flex: 1 1 180px; min-width: 0; }
   #dk-knife-said .dk-btn { min-height: 30px; padding: 2px 10px !important; margin-top: 4px; }
+  #dk-z-say[data-state="warn"] { color: var(--dk-warn); }
+  #dk-z-say[data-state="bad"] { color: var(--dk-danger); }
   .dk-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; cursor: pointer; }
   .dk-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--color-accent); }
 </style>
@@ -188,9 +190,22 @@
         title="How far the blade tip trails behind the center of the holder. About 0.25 mm for a 45° blade and 0.5 mm for a 60° blade; the right value gives the sharpest corners."></div>
       <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" inputmode="decimal"
         title="Turns sharper than this get a swivel: the holder swings around the corner so the tip turns in place. Gentler turns are left to drag."></div>
-      <div class="dk-field"><label for="dk-surfaceZ">Material top Z</label><input class="dk-input" id="dk-surfaceZ" inputmode="decimal"
-        title="In the program's units. Moves below this are cuts. 0 when Z0 is the top of the material."></div>
     </div>
+    <div class="dk-sub">The material</div>
+    <div class="dk-grid">
+      <div class="dk-field" style="grid-column: span 2"><label for="dk-zZero">Z0 is</label>
+        <select class="dk-input" id="dk-zZero" title="Where the loaded program's Z0 is. Auto reads the program's own note (QuickCut writes “Z0: the top of the stock”); without one, a program that never cuts below Z0 is taken as Z0 on the bed.">
+          <option value="auto">Auto: from the program</option>
+          <option value="top">The top of the material</option>
+          <option value="bottom">The bed (under the material)</option>
+          <option value="other">Other: the material top at a Z</option>
+        </select></div>
+      <div class="dk-field" id="dk-thickness-field"><label for="dk-thickness">Material thickness (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-thickness" type="text" data-unit="length" data-min="0" inputmode="decimal"
+        title="With Z0 on the bed, the top of the material is this high: cuts are measured down from it."></div>
+      <div class="dk-field" id="dk-surfaceZ-field"><label for="dk-surfaceZ">Material top at Z</label><input class="dk-input" id="dk-surfaceZ" inputmode="decimal"
+        title="In the program's units. Moves below this are cuts."></div>
+    </div>
+    <div class="dk-hint" id="dk-z-say" aria-live="polite"></div>
     <label class="dk-check"><input type="checkbox" id="dk-stripSpindle">
       <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span>
       <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span></label>
@@ -639,7 +654,9 @@ var DragKnife = (function () {
   var DEFAULTS = {
     offset: 6,           // mm, blade tip behind the axis (large-format CNC drag knives; vinyl-cutter blades are 0.25-0.5)
     swivelAngle: 10,     // degrees; turns sharper than this get a swivel arc
-    surfaceZ: 0,         // program units; Z below this is in the material
+    zZero: 'auto',       // where the program's Z0 is: 'auto' (from its comments, else its heights), 'top' of the material, 'bottom' (the bed), 'other' (surfaceZ)
+    thickness: 0,        // mm; the material's thickness, for Z0 on the bed (the top is then at Z = thickness)
+    surfaceZ: 0,         // program units; with zZero 'other': Z below this is in the material
     rampLength: 12,      // mm; cuts start at the surface and reach depth over this (about 2 offsets: the blade lines up)
     liftOut: 0.5,        // mm; closed shapes lift out over this, moving forward
     liftAngle: 0,        // degrees; 0 = off. Turns sharper than this lift during the swivel
@@ -661,6 +678,7 @@ var DragKnife = (function () {
     protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
   };
   var PROTECT = ['auto', 'inside', 'outside', 'none'];
+  var ZZERO = ['auto', 'top', 'bottom', 'other'];
   // What a saved knife holds: the blade and how it moves. Not the material top, the
   // spindle switch, the side to protect or the offset test's fields.
   var KNIFE_KEYS = ['offset', 'swivelAngle', 'rampLength', 'liftOut', 'startTurn', 'turnDepth', 'lineUp', 'leadIn', 'leadInAngle',
@@ -788,6 +806,7 @@ var DragKnife = (function () {
       if (typeof DEFAULTS[k] === 'boolean') { s[k] = raw && typeof raw[k] === 'boolean' ? raw[k] : DEFAULTS[k]; continue; }
       if (k === 'knives') { s[k] = readKnives(raw && raw[k]); continue; }
       if (k === 'lastTest') { s[k] = raw && typeof raw[k] === 'string' && /^[\d.,]*$/.test(raw[k]) ? raw[k] : ''; continue; }
+      if (k === 'zZero') { s[k] = raw && ZZERO.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       if (k === 'protect') { s[k] = raw && PROTECT.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       var n = raw && raw[k] !== undefined && raw[k] !== '' ? Number(raw[k]) : DEFAULTS[k];
       s[k] = isFinite(n) ? n : DEFAULTS[k];
@@ -801,6 +820,9 @@ var DragKnife = (function () {
     if (!(s.leadInAngle > 0)) s.leadInAngle = DEFAULTS.leadInAngle;
     s.liftFraction = Math.max(0, Math.min(1, s.liftFraction));
     s.turnDepth = Math.max(0, Math.min(1, s.turnDepth));
+    if (!(s.thickness >= 0)) s.thickness = 0;
+    // settings from before the Z0 choice: a material top other than 0 was typed, so keep it
+    if (raw && raw.zZero === undefined && Number(raw.surfaceZ)) s.zZero = 'other';
     s.testCount = Math.max(2, Math.min(9, Math.round(s.testCount)));
     if (!(s.testDepth > 0)) s.testDepth = DEFAULTS.testDepth;
     if (!(s.testFeed > 0)) s.testFeed = DEFAULTS.testFeed;
@@ -855,6 +877,60 @@ var DragKnife = (function () {
   function isOffsetTest(text) { return /\(\s*dragknife processed: offset test/i.test(text); }
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
 
+  // ---------- where the material is ----------
+  // readZ(text, settings) -> { mode: 'top'|'bottom'|'other', auto, by: 'set'|'comment'|'heights',
+  //   surfaceZ (the material top, program units), units, minZ (the deepest feed move, or null),
+  //   depth (mm below the top, or null), bedClearance (mm above the bed, Z0 on the bed), problem }
+  // Auto reads a comment naming Z0 (QuickCut's "(Z0: the top of the stock)", "Z0 on the
+  // bed" and the like); without one, a program that never feeds below Z0 is taken as Z0
+  // on the bed.
+  var Z_TOP = /Z0[^)\n]{0,40}?\b(top of (the )?(stock|material|workpiece|part)|(stock|material) top|on top)/i;
+  var Z_BED = /Z0[^)\n]{0,40}?\b(bed|table|under the stock|bottom|spoil ?board|waste ?board, under)/i;
+  function readZ(text, rawSettings) {
+    var cfg = readSettings(rawSettings);
+    var lines = String(text).split(/\r?\n/), inch = false, motion = 0, minZ = null, feedAbove = false, cmt = '', zNow = null;
+    for (var i = 0; i < lines.length; i++) {
+      var p = parseLine(lines[i]);
+      if (i < 80) { var m = lines[i].match(/\(([^)]*)\)|;(.*)$/); if (m) cmt += ' ' + (m[1] || m[2] || ''); }
+      if (p.special || /G53\b/i.test(p.code)) continue;
+      var z = null, xy = false;
+      p.words.forEach(function (w) {
+        if (w.l === 'G') { var g = Math.round(w.v * 10) / 10; if (g === 20) inch = true; if (g === 21) inch = false; if (g >= 0 && g <= 3 && g === Math.floor(g)) motion = g; }
+        if (w.l === 'Z') z = w.v;
+        if (w.l === 'X' || w.l === 'Y') xy = true;
+      });
+      if (z !== null) zNow = z;
+      if (z !== null && motion >= 1) minZ = minZ === null ? z : Math.min(minZ, z);
+      // cutting moves (feeds across X/Y) that stay above Z0
+      if (xy && motion >= 1 && zNow !== null && zNow > 0) feedAbove = true;
+    }
+    var k = inch ? 1 / 25.4 : 1, mode = cfg.zZero, by = 'set';
+    if (mode === 'auto') {
+      if (Z_BED.test(cmt) && !Z_TOP.test(cmt)) { mode = 'bottom'; by = 'comment'; }
+      else if (Z_TOP.test(cmt)) { mode = 'top'; by = 'comment'; }
+      else if (minZ !== null && minZ >= 0 && feedAbove) { mode = 'bottom'; by = 'heights'; }
+      else { mode = 'top'; by = 'heights'; }
+    }
+    var out = { mode: mode, auto: cfg.zZero === 'auto', by: by, units: inch ? 'in' : 'mm', minZ: minZ, surfaceZ: 0, depth: null, bedClearance: null, problem: null };
+    if (mode === 'bottom') {
+      if (!(cfg.thickness > 0)) out.problem = 'Z0 is on the bed: set Material thickness, so Drag Knife knows where the top of the material is.';
+      out.surfaceZ = cfg.thickness * k;
+    } else if (mode === 'other') out.surfaceZ = cfg.surfaceZ;
+    if (minZ !== null && !out.problem) {
+      out.depth = (out.surfaceZ - minZ) / k;
+      if (mode === 'bottom') out.bedClearance = minZ / k;
+    }
+    return out;
+  }
+  // The settings with surfaceZ where readZ puts the material top.
+  function withZ(text, cfg) {
+    var z = readZ(text, cfg), c = {};
+    for (var key in cfg) c[key] = cfg[key];
+    if (z.problem) throw new Error(z.problem);
+    c.surfaceZ = z.surfaceZ;
+    return c;
+  }
+
   // process(text, settings) -> { text, stats }   (throws Error('Line n: ...') on what it won't rewrite)
   // The settings as the processor reads them: lead-ins switched off = angle 0.
   function active(rawSettings) {
@@ -863,7 +939,7 @@ var DragKnife = (function () {
     return cfg;
   }
   function process(text, rawSettings, meta) {
-    var cfg = active(rawSettings);
+    var cfg = withZ(text, active(rawSettings));
     if (isProcessed(text)) throw new Error('This program has already been processed for the drag knife. Load the original file instead.');
     var ctx = {}, found = null;
     if ((cfg.protect === 'auto' && cfg.leadInAngle > 0) || (cfg.lineUp && cfg.offset > 0)) {
@@ -883,6 +959,7 @@ var DragKnife = (function () {
   // suggest: the manual choice to offer ('none' | 'inside' | 'outside'), or null.
   function analyze(text, rawSettings) {
     var cfg = readSettings(rawSettings);
+    try { cfg = withZ(text, cfg); } catch (e) { /* no top known: judge as set */ }
     if (cfg.leadInAngle <= 0) cfg.leadInAngle = 90; // judge the program as if lead-ins were on
     return analyzeWith(text, cfg, null);
   }
@@ -1666,7 +1743,7 @@ var DragKnife = (function () {
   }
 
   return {
-    KNIFE_KEYS: KNIFE_KEYS, readKnives: readKnives,
+    KNIFE_KEYS: KNIFE_KEYS, readKnives: readKnives, readZ: readZ,
     offsetTest: offsetTest, testOffsets: testOffsets, testTile: testTile, isOffsetTest: isOffsetTest, testSize: testSize,
     sourceLabel: function (name) { return commentText(String(name).replace(/[()]/g, ''), 50); }, processedFrom: processedFrom,
     DEFAULTS: DEFAULTS, process: process, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
@@ -1676,7 +1753,7 @@ var DragKnife = (function () {
 if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
 /* END lib/drag-knife.cjs */
 
-  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'rampLength', 'liftOut', 'turnDepth', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp',
+  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'thickness', 'rampLength', 'liftOut', 'turnDepth', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp',
     'testStep', 'testCount', 'testSize', 'testDepth', 'testFeed'];
   var AUTO_EMPTY = { testStep: 1, testSize: 1 };   // empty (or 0) = worked out from the offsets
   // liftFraction is shown as a percentage.
@@ -1688,7 +1765,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   // Lengths are stored in mm and shown in the operator's units (ncSender's unitsPreference),
   // read by the ncsender-unit-input library: 1/4", 6mm, 2mm+1/16" all work.
   var NU = NcUnitInput, imperial = false;
-  var LENGTHS = { offset: 1, rampLength: 1, liftOut: 1, leadInLength: 1, hopHeight: 1, liftRamp: 1, testStep: 1, testSize: 1, testDepth: 1, testFeed: 1 };
+  var LENGTHS = { offset: 1, thickness: 1, rampLength: 1, liftOut: 1, leadInLength: 1, hopHeight: 1, liftRamp: 1, testStep: 1, testSize: 1, testDepth: 1, testFeed: 1 };
   function showField(k) {
     var el = $('dk-' + k);
     if (AUTO_EMPTY[k]) el.placeholder = 'auto';
@@ -1833,6 +1910,38 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   var saveFiles = $('dk-saveFiles');
   saveFiles.checked = !!cfg.saveToFileManager;
   saveFiles.addEventListener('change', function() { cfg.saveToFileManager = saveFiles.checked; save(); });
+  // Where Z0 is, and the depth of cut that gives with the loaded program.
+  var zZero = $('dk-zZero');
+  zZero.value = cfg.zZero;
+  zZero.addEventListener('change', function() { cfg.zZero = zZero.value; save(); refresh(); });
+  var zRun = 0;
+  async function zSay() {
+    var run = ++zRun, say = $('dk-z-say'), p = null;
+    try { p = await loadSource(); } catch (e) { p = null; }
+    if (run !== zRun) return;
+    var text = p && (p.text || p.cur), z = DragKnife.readZ(text || '', cfg);
+    var bed = z.mode === 'bottom';
+    $('dk-thickness-field').hidden = !bed;
+    $('dk-surfaceZ-field').hidden = z.mode !== 'other';
+    zZero.classList.toggle('dk-warn', !!z.problem);
+    say.removeAttribute('data-state');
+    var where = { top: 'the top of the material', bottom: 'the bed', other: 'where you set it (the material top at Z' + cfg.surfaceZ + ')' }[z.mode];
+    var how = !z.auto ? '' : z.by === 'comment' ? ' (the program says so)' : ' (no note in the program: ' + (bed ? 'it never cuts below Z0' : 'it cuts below Z0') + ')';
+    if (!text) { say.textContent = 'Z0 is ' + (z.auto ? 'read from the program when one is loaded' : where) + '. Load a program to see its depth of cut.'; return; }
+    if (z.problem) { say.setAttribute('data-state', 'warn'); say.textContent = 'Z0 is ' + where + how + ': type the Material thickness, so the depth of cut is known.'; return; }
+    var u = z.units, zf = function(v) { return 'Z' + (Math.round(v * 1000) / 1000); };
+    var msg = 'Z0 is ' + where + how + '. ';
+    if (z.depth === null) msg += 'The program has no cutting moves.';
+    else if (z.depth <= 1e-9) { say.setAttribute('data-state', 'warn'); msg += 'Nothing cuts below the top of the material (' + zf(z.surfaceZ) + ' in the program): check Z0 is' + (bed ? ' and Material thickness' : '') + '.'; }
+    else {
+      msg += 'Depth of cut: ' + lengthSay(z.depth) + ' into the material (deepest ' + zf(z.minZ) + (u === 'in' ? ' in' : '') + (bed || z.mode === 'other' ? ', the top at ' + zf(z.surfaceZ) : '') + ').';
+      if (bed && z.bedClearance !== null) {
+        if (z.bedClearance < -1e-9) { say.setAttribute('data-state', 'bad'); msg += ' That’s ' + lengthSay(-z.bedClearance) + ' into the bed: check Material thickness.'; }
+        else msg += ' ' + lengthSay(z.bedClearance) + ' above the bed.';
+      } else if (cfg.thickness > 0 && z.depth > cfg.thickness + 1e-9 && z.mode !== 'bottom') { say.setAttribute('data-state', 'warn'); }
+    }
+    say.textContent = msg;
+  }
   var startTurn = $('dk-startTurn');
   startTurn.checked = !!cfg.startTurn;
   function startTurnShown() { var f = $('dk-turnDepth'); f.disabled = !cfg.startTurn; f.closest('.dk-field').classList.toggle('dk-off', !cfg.startTurn); }
@@ -1887,7 +1996,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var o = testOpts(), t = DragKnife.offsetTest(o, cfg);
       plan.textContent = plural(t.offsets.length, 'tile') + ': ' + mmList(t.offsets) + (o.uncorrected ? ', and tile 0 uncorrected' : '') + '; each ' + lengthSay(o.size) +
         ' wide. Needs about ' + NU.formatMm(Math.ceil(t.width), imperial) + ' × ' + lengthSay(Math.ceil(t.height)) + ' of scrap.' +
-        (cfg.surfaceZ !== 0 ? ' It cuts from Z0 on the scrap’s top: your Material top Z (' + cfg.surfaceZ + ') is for programs, not the test.' : '');
+        (cfg.zZero === 'bottom' || cfg.zZero === 'other' ? ' It cuts from Z0 on the scrap’s top: your Z0 is choice is for programs, not the test.' : '');
       btn.disabled = false;
       return t;
     } catch (e) { plan.textContent = e.message || String(e); btn.disabled = true; return null; }
@@ -2030,7 +2139,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function refresh() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(function() { checkAuto(); side(); }, 250);
-    testPlan(); showPick(); lengthsCheck(); bladeShown();
+    testPlan(); showPick(); lengthsCheck(); bladeShown(); zSay();
   }
   var autoRun = 0;
   async function checkAuto() {
@@ -2255,7 +2364,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       try { var res = DragKnife.process(text, cfg); if (!res.changed || !res.stats.rewritten) return null; out = res.text; units = res.stats.units; }
       catch (e) { return null; }
     }
-    var k = units === 'in' ? 1 / 25.4 : 1, R = cfg.offset * k, surface = cfg.surfaceZ;
+    var zr = DragKnife.readZ(text, cfg);
+    var k = units === 'in' ? 1 / 25.4 : 1, R = cfg.offset * k, surface = zr.problem ? 0 : zr.surfaceZ;
     var coarse = cutRuns(text, 1e9, surface), allPts = [];
     coarse.forEach(function(r) { allPts = allPts.concat(r.pts); });
     if (!allPts.length) return null;
@@ -2804,9 +2914,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       fig('The tip’s circle', spinFigure(), 'Seen from above: the holder stays put, the tip swings round it at the blade offset. Half the circle’s diameter is the offset.') + '</div>' +
       '<h4>Settings</h4><ul>' +
       '<li><b>Blade / Blade offset:</b> how far the tip trails the holder. Large-format CNC drag knives trail by several mm (6 mm by default); vinyl-cutter style blades about 0.25 mm (30° and 45°) or 0.5 mm (60°). Too small and corners round off; too big and they get a hook.</li>' +
-      '<li><b>Your knives:</b> <b>Save as a knife…</b> under Blade keeps the blade offset and how the knife moves (ramp, lift-out, the turn, lead-ins, lifts) under a name; pick it from the Blade menu to switch knives. Material top Z, the spindle switch and Keep lead-ins off aren’t part of a knife.</li>' +
+      '<li><b>Your knives:</b> <b>Save as a knife…</b> under Blade keeps the blade offset and how the knife moves (ramp, lift-out, the turn, lead-ins, lifts) under a name; pick it from the Blade menu to switch knives. Z0 is, the material thickness, the spindle switch and Keep lead-ins off aren’t part of a knife.</li>' +
       '<li><b>Swivel above:</b> turns sharper than this get a swivel. Gentler bends just drag.</li>' +
-      '<li><b>Material top Z:</b> moves below this are cuts. 0 when Z0 is the top of the material.</li>' +
+      '<li><b>Z0 is</b> (under The material): where the program’s Z0 is. <b>Auto</b> reads the program’s own note (QuickCut writes “Z0: the top of the stock”; “on the bed” and “under the stock” mean the bed); without one, a program that never cuts below Z0 is taken as Z0 on the bed. For <b>The bed</b>, type <b>Material thickness</b>: the top is that high. <b>Other</b> takes the material top as a Z in the program’s units. The line under them shows the depth of cut this gives (and how far above the bed), worked out from the loaded program.</li>' +
       '<li><b>Remove spindle starts:</b> M3, M4 and S come out (commented, so you can see them). A drag knife must never spin.</li>' +
       '<li><b>Lead into sharp corners:</b> on by default for turns over 60°. The blade needs to travel about 2 to 3 offsets to swing into line, so make the lead-in about 3 offsets long (18 mm for 6 mm) and the ramp about 2. The dialog warns when they’re shorter, with a button to set them.</li>' +
       '<li><b>Turn the blade in place before each cut:</b> the blade keeps pointing the way it last cut, even in the air. Before the next cut (and where it comes down for a lead-in) the tip lands exactly on the start, the blade turns there at <i>Turn at</i> (25 % of the depth), then ramps in lined up. The first cut of a program can’t know which way the blade points: that’s the next setting.</li>' +
@@ -2862,7 +2972,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       if (cfg.saveToFileManager && !origPath) origPath = await freePath(SAVE_FOLDER + '/' + name, src.text);
       var sourceId = origPath || name;
       var out = DragKnife.process(src.text, cfg, { source: sourceId });
-      var why = !(cfg.offset > 0) ? 'the blade offset is 0' : 'the program has no cuts below Z' + cfg.surfaceZ + ' with X/Y moves (check “Material top Z”)';
+      var why = !(cfg.offset > 0) ? 'the blade offset is 0' : 'the program has no cuts below the top of the material with X/Y moves (check “Z0 is”)';
       if (!out.changed) { note('warn', 'Nothing to change: ' + esc(why) + '.'); return; }
       var newName = (origPath ? baseName(origPath) : name).replace(/\.[^.\/\\]*$/, '') + '-dragknife.nc';
       if (cfg.saveToFileManager) {
@@ -2926,6 +3036,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
   testPlan(); showPick(); lengthsCheck();
-  readLoaded().then(function() { showSource(); checkAuto(); side(); });
+  readLoaded().then(function() { showSource(); checkAuto(); side(); zSay(); });
 })();
 </script>

@@ -650,3 +650,33 @@ test('shapes that start at Z0 (QuickCut) still turn in place: the knife lifts fi
   const lines = res.text.split('\n'), c2 = lines.findIndex(l => l.startsWith('(dk: cut 2'));
   assert.match(lines[c2 + 1], /^G0 Z1$/, 'lifts off the top first: ' + lines.slice(c2, c2 + 4).join(' / '));
 });
+
+// ---------- where Z0 is ----------
+test('Z0: read from the program comment, else from its heights; depth of cut worked out', () => {
+  const top = '(Z0: the top of the stock)\n' + prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X20 Y0 F1000', 'G1 X20 Y20']);
+  let z = DK.readZ(top, {});
+  assert.deepStrictEqual([z.mode, z.by, z.surfaceZ, z.depth], ['top', 'comment', 0, 0.3]);
+  // QuickCut's planer under the stock, ncCut2D's "on the bed"
+  for (const c of ['(Z0: the wasteboard, under the stock)', '(Z0 on the bed)']) {
+    z = DK.readZ(c + '\n' + prog(['G0 X0 Y0', 'G1 Z2.8 F200', 'G1 X20 Y0 F1000']), { thickness: 3 });
+    assert.deepStrictEqual([z.mode, z.by], ['bottom', 'comment'], c);
+    assert.ok(Math.abs(z.depth - 0.2) < 1e-9 && Math.abs(z.bedClearance - 2.8) < 1e-9, JSON.stringify(z));
+  }
+  // no comment, never below Z0: the bed
+  const bed = prog(['G0 X0 Y0', 'G1 Z2.5 F200', 'G1 X20 Y0 F1000', 'G1 X20 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
+  z = DK.readZ(bed, {});
+  assert.deepStrictEqual([z.mode, z.by], ['bottom', 'heights']);
+  assert.match(z.problem, /Material thickness/);
+  assert.throws(() => DK.process(bed, { offset: 2 }), /Material thickness/);
+  // with the thickness: cut as a 0.5 mm deep cut from the top at Z3
+  const res = DK.process(bed, { offset: 2, thickness: 3, leadIn: false, lineUp: false });
+  assert.strictEqual(res.stats.rewritten, 1);
+  assert.match(res.text, /^G1 Z3\b/m, 'ramps in from the top at Z3');
+  // inch program, thickness in mm
+  z = DK.readZ('G20 G90\nG0 X0 Y0\nG1 Z0.1 F10\nG1 X1 Y0 F40\n', { zZero: 'bottom', thickness: 3.175 });
+  assert.ok(Math.abs(z.surfaceZ - 0.125) < 1e-9 && Math.abs(z.depth - 0.635) < 1e-6, JSON.stringify(z));
+  // chosen, not auto; an old saved material top keeps working
+  assert.strictEqual(DK.readZ(bed, { zZero: 'top' }).mode, 'top');
+  assert.strictEqual(DK.readSettings({ surfaceZ: -5 }).zZero, 'other');
+  assert.strictEqual(DK.readZ(bed, { surfaceZ: 4 }).surfaceZ, 4);
+});
