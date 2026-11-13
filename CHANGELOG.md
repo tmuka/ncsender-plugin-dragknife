@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Moves the plugin adds before a cut (lifting off Z0 where QuickCut touches down, going to and from the line-up) now travel as high as the program's own travels, not **Hop height**. A spring-loaded holder zeroed pressed down still touched at 1 mm up and cut a loop above the star's top point on the way to the line-up and back. **Hop height**'s tip says it must clear the material.
+- **Before a cut, nothing touches down early.** A program that comes down to Z0 at the start (QuickCut does) has that touch-down left out: Drag Knife comes down itself, where the cut really starts (after the line-up, or where the blade turns in place). Where the material sits above Z0, that touch-down already cut, before the blade was lined up.
+- Moves Drag Knife adds before a cut (to and from the line-up, lifting off) travel as high as the program's own travels, not **Hop height**, and the blade comes down quickly only to **Hop height**, then at the plunge feed. A spring-loaded holder zeroed pressed down, or material above Z0, still touched at 1 mm up and cut a loop above the star's top point. **Hop height**'s tip says it must clear the material (3 mm leaves room for material that isn't flat).
 
 ## 0.1.4: Your knives, Z0 and a new layout
 

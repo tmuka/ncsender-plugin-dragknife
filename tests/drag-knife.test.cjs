@@ -83,10 +83,11 @@ test('lifted swivels rise during the turn and still cut the right shape', () => 
   for (const d of c.corners) assert.ok(d < TOL, 'corner ' + d);
 });
 
-test('ramp in starts at the surface; closed shapes lift out moving forward', () => {
+test('ramp in starts at the surface, from Hop height; closed shapes lift out moving forward', () => {
   const lines = DK.process(square, cfg).text.split('\n');
   const firstCut = lines.findIndex(l => /^G1 Z0\b/.test(l));
   assert.ok(firstCut > 0, 'plunges to the surface, not to depth:\n' + lines.join('\n'));
+  assert.match(lines[firstCut - 1], /^G0 Z1$/, 'rapid only down to Hop height');
   assert.ok(!lines.some(l => /^G1 Z-0\.3 F200/.test(l)), 'no straight plunge to depth');
   const liftOut = lines.findIndex(l => /^G1 X[-\d.]+ Y[-\d.]+ Z0\b/.test(l));
   assert.ok(liftOut > firstCut, 'lift out while moving');
@@ -138,13 +139,15 @@ test('every line written fits Grbl, grblHAL and FluidNC: short, plain ASCII, no 
   assert.throws(() => DK.process(res.text, cfg), /already been processed/);
 });
 
-test('a cut that starts at the surface: feed move, not a rapid; overlap at final depth', () => {
+test('a cut that starts at the surface: its touch-down is left out; overlap at final depth', () => {
   // QuickCut-style: down to Z0, then ramping passes round the same loop
   const t = prog(['G0 X0 Y0', 'G0 Z1', 'G1 Z0 F100', 'G1 X10 Y0 Z-0.1 F500', 'G1 X10 Y10 Z-0.2', 'G1 X0 Y10 Z-0.3', 'G1 X0 Y0 Z-0.4',
     'G1 X10 Y0', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0']);
   const res = DK.process(t, cfg), lines = res.text.split('\n');
   const nudge = lines.findIndex(l => l.startsWith('(dk: cut')) + 1;
-  assert.match(lines[nudge], /^G1 X0\.25 Y0 F500$/, lines[nudge]);
+  // the program's G1 Z0 at the start is gone: over at Z1, then ramps in from there
+  assert.match(lines[nudge], /^G0 X0\.25 Y0$/, lines[nudge]);
+  assert.doesNotMatch(res.text, /^G1 Z0 F100$/m);
   const cuts = lines.filter(l => /^G[123] .*X/.test(l));
   const lastZ = cuts.slice(-4).map(l => (l.match(/Z(-?[\d.]+)/) || [])[1]).filter(Boolean);
   assert.ok(lastZ.every(z => Number(z) <= -0.4 + 1e-9 || Number(z) === 0), 'overlap at full depth then lift: ' + lastZ);
@@ -240,7 +243,8 @@ function sq(x0, y0, x1, y1, ccw = true) {
   const pts = ccw ? [[x1, y0], [x1, y1], [x0, y1], [x0, y0]] : [[x0, y1], [x1, y1], [x1, y0], [x0, y0]];
   return [`G0 X${x0} Y${y0}`, 'G1 Z-0.3 F200', ...pts.map(([x, y], i) => `G1 X${x} Y${y}` + (i ? '' : ' F1000')), 'G0 Z5'];
 }
-const leadsPerCut = (text) => text.split('(dk: cut').slice(1).map(c => (c.match(/^G0 Z1$/gm) || []).length);
+// lead-in hops: up to Hop height, then over (not the way down to it before a ramp)
+const leadsPerCut = (text) => text.split('(dk: cut').slice(1).map(c => (c.match(/^G0 Z1\nG0 X/gm) || []).length);
 
 test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
   const base = { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
@@ -577,7 +581,7 @@ test('lift-out follows the shape, even when longer than the side it starts on', 
 
 test('offset test: every corner swivels, and the blade turns in place from tile to tile', () => {
   const t = DK.offsetTest({ offsets: [5, 6, 7], size: 0, depth: 0.5 }, { leadIn: true, leadInLength: 1.5, rampLength: 2, liftOut: 25.4 });
-  assert.ok(!/^G0 Z1$/m.test(t.text), 'no lead-in hops');
+  assert.ok(!/^G0 Z1\nG0 X/m.test(t.text), 'no lead-in hops');
   assert.match(t.text, /corners swivel/);
   assert.ok((t.text.match(/^G[23] /gm) || []).length > 9, 'swivels and turns');
 });
@@ -648,9 +652,10 @@ test('shapes that start at Z0 (QuickCut) still turn in place: the knife lifts fi
   const res = DK.process(two, { offset: 4, leadIn: false, lineUp: false });
   assert.strictEqual(res.stats.turns, 1);
   const lines = res.text.split('\n'), c2 = lines.findIndex(l => l.startsWith('(dk: cut 2'));
-  // up to the program's own travel height (Z2 here), over, then down to Hop height
-  assert.match(lines[c2 + 1], /^G0 Z2$/, 'lifts off the top first: ' + lines.slice(c2, c2 + 4).join(' / '));
-  assert.match(lines[c2 + 3], /^G0 Z1$/, 'back down to Hop height: ' + lines.slice(c2, c2 + 5).join(' / '));
+  // its G1 Z0 left out: over at the program's travel height (Z2), then down to Hop height
+  assert.match(lines[c2 + 1], /^G0 X/, 'goes over from Z2: ' + lines.slice(c2, c2 + 4).join(' / '));
+  assert.match(lines[c2 + 2], /^G0 Z1$/, 'down to Hop height: ' + lines.slice(c2, c2 + 5).join(' / '));
+  assert.doesNotMatch(lines.slice(c2).join('\n'), /^G1 Z0\b/m, 'no touch-down before the turn');
 });
 
 // ---------- where Z0 is ----------
@@ -673,7 +678,7 @@ test('Z0: read from the program comment, else from its heights; depth of cut wor
   // with the thickness: cut as a 0.5 mm deep cut from the top at Z3
   const res = DK.process(bed, { offset: 2, thickness: 3, leadIn: false, lineUp: false });
   assert.strictEqual(res.stats.rewritten, 1);
-  assert.match(res.text, /^G1 Z3\b/m, 'ramps in from the top at Z3');
+  assert.match(res.text, /^G0 Z4\nG1 Z3\b/m, 'ramps in from the top at Z3, rapid only to Hop height above it');
   // inch program, thickness in mm
   z = DK.readZ('G20 G90\nG0 X0 Y0\nG1 Z0.1 F10\nG1 X1 Y0 F40\n', { zZero: 'bottom', thickness: 3.175 });
   assert.ok(Math.abs(z.surfaceZ - 0.125) < 1e-9 && Math.abs(z.depth - 0.635) < 1e-6, JSON.stringify(z));
