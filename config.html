@@ -1790,7 +1790,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var zTrail = el('g', {}, zg);
     var zHolder = el('circle', { r: zR, fill: 'none', stroke: 'var(--color-text-primary)', 'stroke-width': 1.3, 'vector-effect': 'non-scaling-stroke' }, zg);
     var zBlade = el('line', { stroke: 'var(--color-text-primary)', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }, zg);
-    $('dk-zoom-cap').textContent = 'From above, following the knife, to scale (' + lengthSay(Math.round(zoomW / zk * 10) / 10) + ' across)';
+    var zCap = 'From above, following the knife, to scale (' + lengthSay(Math.round(zoomW / zk * 10) / 10) + ' across)';
+    $('dk-zoom-cap').textContent = zCap;
+    var zReplay = el('g', {}, zg);
+    zg.insertBefore(zReplay, zHolder);
     var samples = sc.samples, ZS = sc.ZS, E = sc.E, H = sc.H, RH = sc.RH, T = sc.T, D = sc.depth;
 
     // camera: turned and tilted, looking down a little from the front left
@@ -1933,6 +1936,93 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       $('dk-side-detail').textContent = nt[1];
     }
     var stride = Math.max(1, Math.round(samples.length / 3000));
+    // Corners for the close-up's instant replay: swivels (the holder swings round while
+    // the tip stays nearly still) and lead-ins (a hop, then in along the next side).
+    // Each is a sample range with some travel before and after.
+    var corners = (function() {
+      var n = samples.length, dist = new Array(n), list = [], R = sc.R, k = sc.k || 1;
+      dist[0] = 0;
+      for (var q = 1; q < n; q++) dist[q] = dist[q - 1] + Math.hypot(samples[q].x - samples[q - 1].x, samples[q].y - samples[q - 1].y);
+      function back(q, d) { var a = q; while (a > 0 && dist[q] - dist[a] < d) a--; return a; }
+      function fwd(q, d) { var b = q; while (b < n - 1 && dist[b] - dist[q] < d) b++; return b; }
+      // swivels: runs of cutting samples where the tip moves under 30 % of the holder's move
+      var s0 = -1;
+      for (q = 1; q <= n; q++) {
+        var a = q < n ? samples[q] : null, b = samples[q - 1];
+        var piv = a && a.cut && b.cut && a.tip && b.tip && Math.hypot(a.tip.x - b.tip.x, a.tip.y - b.tip.y) < 0.3 * Math.hypot(a.x - b.x, a.y - b.y);
+        if (piv && s0 < 0) s0 = q - 1;
+        if (!piv && s0 >= 0) {
+          if (dist[q - 1] - dist[s0] >= R * 0.5) list.push({ a: back(s0, R * 2), b: fwd(q - 1, R * 2), what: 'a swivel' });
+          s0 = -1;
+        }
+      }
+      // lead-ins: a cut reached by a hop (the air before it at hop height, as in the captions)
+      var hopZ = cfg.hopHeight * k;
+      for (q = 1; q < n; q++) {
+        if (samples[q].cut && !samples[q - 1].cut) {
+          var up = q - 1, airTop = -Infinity;
+          while (up > 0 && !samples[up].cut) { airTop = Math.max(airTop, samples[up].z); up--; }
+          if (!up || Math.abs(airTop - hopZ) > Math.max(1e-4, hopZ * 0.02)) continue;
+          list.push({ a: back(up, R * 1.5), b: fwd(q, cfg.leadInLength * k + R * 2), what: 'a lead-in' });
+        }
+      }
+      list.sort(function(x, y) { return x.a - y.a; });
+      return list;
+    })();
+    // A corner replays 3 times in slow motion in the close-up, centred on it, while the
+    // 3D view carries on; corners passed meanwhile aren't replayed. A click skips it.
+    var REPLAYS = 3, replay = null, nextCorner = 0;
+    function startReplay(c, now) {
+      var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, travel = 0;
+      for (var q = c.a; q <= c.b; q++) {
+        var m = samples[q];
+        [[m.x, m.y]].concat(m.tip ? [[m.tip.x, m.tip.y]] : []).forEach(function(v) { x0 = Math.min(x0, v[0]); x1 = Math.max(x1, v[0]); y0 = Math.min(y0, v[1]); y1 = Math.max(y1, v[1]); });
+        if (q > c.a) travel += Math.hypot(m.x - samples[q - 1].x, m.y - samples[q - 1].y);
+      }
+      var w = Math.max(zoomW, (x1 - x0 + 2 * zR) * 1.15, (y1 - y0 + 2 * zR) * 1.15);
+      replay = { c: c, t0: now, pass: Math.max(1800, Math.min(5000, travel / (zR * 1.2) * 1000)), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: w, drawn: -1 };
+      zsvg.setAttribute('viewBox', [replay.cx - w / 2, -(replay.cy + w / 2), w, w].map(function(v) { return v.toFixed(5); }).join(' '));
+      zTrail.setAttribute('opacity', 0.3);
+    }
+    function endReplay() {
+      replay = null;
+      while (zReplay.firstChild) zReplay.removeChild(zReplay.firstChild);
+      zTrail.removeAttribute('opacity');
+      $('dk-zoom-cap').textContent = zCap;
+    }
+    zsvg.onclick = function() { if (replay) endReplay(); };
+    function zKnife(p) {
+      zHolder.setAttribute('cx', p.x); zHolder.setAttribute('cy', p.y);
+      zHolder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
+      zHolder.setAttribute('stroke-dasharray', p.cut ? 'none' : '2 1.5');
+      if (p.tip) { zBlade.setAttribute('x1', p.x); zBlade.setAttribute('y1', p.y); zBlade.setAttribute('x2', p.tip.x); zBlade.setAttribute('y2', p.tip.y); }
+      zBlade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
+    }
+    // One replay frame: the tip's path from the corner range's start to now, in its colours.
+    function replayFrame(now) {
+      var r = replay, c = r.c, el2 = now - r.t0, cycle = r.pass + 600, pass = Math.floor(el2 / cycle);
+      if (pass >= REPLAYS) { endReplay(); return false; }
+      var f = Math.min(1, (el2 - pass * cycle) / r.pass), idx = c.a + Math.round(f * (c.b - c.a));
+      $('dk-zoom-cap').textContent = 'Instant replay ' + (pass + 1) + ' of ' + REPLAYS + ', slow motion: ' + c.what + ' (click to skip)';
+      if (idx !== r.drawn) {
+        while (zReplay.firstChild) zReplay.removeChild(zReplay.firstChild);
+        var line = null, lk = null, hop = false;
+        for (var q = c.a; q <= idx; q++) {
+          var m = samples[q];
+          if (!m.cut || !m.tip) { line = null; if (q > c.a && samples[q - 1].cut) hop = true; continue; }
+          var kd = sc.kind(m.tip, hop);
+          if (!line || kd !== lk) {
+            var prev = line && line.getAttribute('points').split(' ').pop();
+            line = el('polyline', { points: prev || '', fill: 'none', stroke: LOOK[kd], 'stroke-width': kd === 'cut' ? 2 : 2.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': NSS }, zReplay);
+            lk = kd;
+          }
+          line.setAttribute('points', (line.getAttribute('points') + ' ' + m.tip.x.toFixed(4) + ',' + m.tip.y.toFixed(4)).trim());
+        }
+        r.drawn = idx;
+      }
+      zKnife(samples[idx]);
+      return true;
+    }
     function frame(now) {
       if (run !== sideRun || !ROOT.isConnected || view !== 'side') return;
       if (t0 === null) t0 = now;
@@ -1960,13 +2050,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var p = samples[Math.min(i, samples.length - 1)];
       draw(p); say(Math.min(i, samples.length - 1));
       followView3d(p.tip ? P(p.tip.x, p.tip.y, p.z) : P(p.x, p.y, p.z + E));
-      zoomTo(p);
-      zHolder.setAttribute('cx', p.x); zHolder.setAttribute('cy', p.y);
-      zHolder.setAttribute('fill', p.cut ? 'color-mix(in srgb, var(--color-text-primary) 25%, transparent)' : 'none');
-      zHolder.setAttribute('stroke-dasharray', p.cut ? 'none' : '2 1.5');
-      if (p.tip) { zBlade.setAttribute('x1', p.x); zBlade.setAttribute('y1', p.y); zBlade.setAttribute('x2', p.tip.x); zBlade.setAttribute('y2', p.tip.y); }
-      zBlade.setAttribute('visibility', p.tip ? 'visible' : 'hidden');
-      if (i < samples.length) requestAnimationFrame(frame);
+      // the next corner the knife has finished starts a replay, unless one is running
+      while (nextCorner < corners.length && corners[nextCorner].b < i) {
+        if (!replay) startReplay(corners[nextCorner], now);
+        nextCorner++;
+      }
+      if (!(replay && replayFrame(now))) { zoomTo(p); zKnife(p); }
+      if (i < samples.length || replay) requestAnimationFrame(frame);
       else { svg.setAttribute('data-done', '1'); setTimeout(function() { if (run === sideRun && ROOT.isConnected) side(); }, 3000); }
     }
     requestAnimationFrame(frame);
