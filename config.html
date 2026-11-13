@@ -56,8 +56,20 @@
   .dk-foot .dk-actions { margin-left: auto; flex: none; }
   /* The views fill their column: each card shares the height, each drawing takes what's left. */
   /* The preview stays in view while the settings scroll past: as tall as the window allows. */
-  .dk-views { align-self: start; position: sticky; top: 0; min-height: max(440px, calc(100vh - 250px)); }
-  .dk-views > .dk-view { flex: 1 0 auto; }
+  /* Exactly the visible space between the dialog's header and footer (--dk-view-h, set by
+     fitPreview), so it never runs under either. */
+  .dk-views { align-self: start; position: sticky; top: 0; height: var(--dk-view-h, calc(100vh - 250px)); }
+  .dk-views > .dk-view { flex: 1 1 0; min-height: 0; }
+  /* Short windows: a smaller close-up, so the side panel fits beside the drawing. */
+  @media (max-height: 820px) {
+    .dk-wrapper .dk-zoom svg { width: 160px; height: 160px; }
+    .dk-wrapper #dk-demo-scale { display: none; }
+  }
+  @media (max-height: 740px) {
+    .dk-wrapper .dk-zoom svg { width: 120px; height: 120px; }
+    .dk-wrapper .dk-demo-aside { gap: 6px; }
+    .dk-wrapper .dk-legend { gap: 2px; font-size: 0.74rem; }
+  }
   .dk-view { flex: 1 1 0; min-height: 0; padding: 12px 14px; gap: 8px; }
   .dk-view-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; flex: none; }
   .dk-view-sub { font-size: 0.8rem; color: var(--color-text-secondary); flex: 1 1 200px; }
@@ -77,7 +89,7 @@
   /* Tall screens: the views on top, the settings scroll below. */
   @media (orientation: portrait) {
     .dk-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
-    .dk-views { order: -1; position: static; align-self: stretch; min-height: 0; height: max(420px, 55vh); }
+    .dk-views { order: -1; position: static; align-self: stretch; height: min(max(420px, 55vh), var(--dk-view-h, 100vh)); }
   }
   /* Small screens: one long page. */
   @media (max-width: 700px), (max-height: 600px) {
@@ -2993,6 +3005,16 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '<li>Find your offset with the <b>Offset test</b> (above): rounded corners mean raise it; a little hook means lower it.</li>' +
       '<li>Check the result in ncSender’s preview before running it. Opening Drag Knife on a result lets you process it again from the original with other settings.</li></ul>';
   }
+  // The preview card: the visible height between the dialog's header and footer.
+  function fitPreview() {
+    var head = ROOT.querySelector('.dk-head'), foot = ROOT.querySelector('.dk-foot'), cs = getComputedStyle(ROOT);
+    var gap = parseFloat(cs.rowGap || cs.gap) || 12, pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    var h = ROOT.clientHeight - pad - (head ? head.offsetHeight : 0) - (foot ? foot.offsetHeight : 0) - 2 * gap;
+    ROOT.style.setProperty('--dk-view-h', Math.max(320, Math.floor(h)) + 'px');
+  }
+  fitPreview();
+  if (window.ResizeObserver) new ResizeObserver(fitPreview).observe(ROOT);
+  else window.addEventListener('resize', fitPreview);
   // Help covers the dialog: back to the top first (the dialog scrolls as one page), and
   // the page doesn't scroll under it.
   function helpShown(on) { if (on) ROOT.scrollTop = 0; ROOT.classList.toggle('dk-help-on', on); $('dk-help').hidden = !on; }
