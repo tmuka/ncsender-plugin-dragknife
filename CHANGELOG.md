@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **One scrollbar:** on smaller screens (laptops at 1366×768 or 1280×720) the dialog scrolls as one page; cards grow to their content instead of scrolling inside. The preview stays in view while the settings scroll past, and the footer with **Process** stays at the bottom.
 - **Two pages of cards**, like QuickCut's: **Job** (Knife, The material, Corners, Safety) for each time, and **Knife setup** (Blade, Into and out of each cut, Lead-ins, Lift at sharp corners, Offset test) for once per knife. A loaded offset test opens Knife setup; a short-length warning shows on Job too.
 - **Z0 is** (under *The material*): Auto (from the program's note, else its heights), the top of the material, the bed (with **Material thickness**), or Other (the old **Material top Z**, kept for settings that set it). A line under it shows the **depth of cut** from the loaded program, and how far above the bed, with warnings when nothing cuts below the top or a cut goes into the bed. A program with Z0 on the bed and no thickness is refused with a message instead of processed wrongly.
 - **Line up the blade before the first cut** (on): the program's first cut, its blade direction unknown, used to leave a start mark up to an offset long, inside the part or outside depending on where the last job left the blade (a star: up to 5.9 mm inside). Now the blade first drags a short shallow line in clear waste beside the start; on that star the worst start mark is 0.4 mm, at the very top of the ramp.

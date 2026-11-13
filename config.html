@@ -14,7 +14,9 @@
     --dk-btn-bg: color-mix(in srgb, var(--color-accent) 70%, #000);
     /* Full window, like QuickCut: 24 px clear all round. */
     width: calc(100vw - 48px); height: calc(100vh - 48px); box-sizing: border-box;
-    display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; overflow: hidden;
+    display: flex; flex-direction: column; gap: 12px; padding: 4px 2px;
+    /* One scrollbar for the whole dialog: cards grow to their content, nothing inside scrolls. */
+    overflow-x: hidden; overflow-y: auto;
     color: var(--color-text-primary); font-size: 0.9rem;
   }
   .plugin-dialog-container:has(.dk-wrapper) { max-height: none !important; max-width: none !important; }
@@ -26,6 +28,7 @@
   .dk-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; color: var(--color-text-primary); position: relative; margin-left: auto; }
   .dk-help-btn { flex: none; }
   .dk-wrapper { position: relative; }
+  .dk-wrapper.dk-help-on { overflow: hidden; }
   .dk-help { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; }
   .dk-help-top { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--color-border); flex: none; }
   .dk-help-top h3 { margin: 0 !important; font-size: 1.1rem !important; font-weight: 700 !important; color: var(--color-text-primary) !important; flex: 1; }
@@ -46,13 +49,15 @@
   .dk-switch input:checked + .dk-switch-track { background: var(--color-accent); }
   .dk-switch input:checked + .dk-switch-track::after { transform: translateX(18px); }
   .dk-switch input:focus-visible + .dk-switch-track { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-  .dk-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(340px, 1fr) minmax(400px, 1.25fr); gap: 12px; }
-  .dk-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
-  .dk-foot { flex: none; display: flex; gap: 10px 16px; align-items: center; padding: 10px 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; }
+  .dk-body { flex: 1 0 auto; display: grid; grid-template-columns: minmax(340px, 1fr) minmax(400px, 1.25fr); gap: 12px; }
+  .dk-col { display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+  .dk-foot { flex: none; position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px 16px; align-items: center; padding: 10px 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 12px; }
   .dk-foot .dk-note { flex: 1; min-width: 0; }
   .dk-foot .dk-actions { margin-left: auto; flex: none; }
   /* The views fill their column: each card shares the height, each drawing takes what's left. */
-  .dk-views { overflow: hidden; }
+  /* The preview stays in view while the settings scroll past: as tall as the window allows. */
+  .dk-views { align-self: start; position: sticky; top: 0; min-height: max(440px, calc(100vh - 250px)); }
+  .dk-views > .dk-view { flex: 1 0 auto; }
   .dk-view { flex: 1 1 0; min-height: 0; padding: 12px 14px; gap: 8px; }
   .dk-view-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; flex: none; }
   .dk-view-sub { font-size: 0.8rem; color: var(--color-text-secondary); flex: 1 1 200px; }
@@ -60,7 +65,7 @@
   .dk-demo, .dk-side { flex: 1; min-height: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 8px 10px; }
   .dk-demo { display: flex; gap: 12px; }
   .dk-demo > .dk-side { flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent; }
-  .dk-demo-aside { flex: 0 0 230px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .dk-demo-aside { flex: 0 0 230px; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
   .dk-zoom svg { width: 200px; height: 200px; border: 1px solid var(--color-border); border-radius: 8px; display: block; margin: 0 auto; }
   .dk-zoom figcaption { max-width: none; }
   .dk-legend { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--color-text-secondary); line-height: 1.3; }
@@ -71,14 +76,14 @@
   .dk-fit { padding: 2px 12px !important; min-height: 0 !important; font-size: 0.85em; }
   /* Tall screens: the views on top, the settings scroll below. */
   @media (orientation: portrait) {
-    .dk-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr); }
-    .dk-views { order: -1; }
+    .dk-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+    .dk-views { order: -1; position: static; align-self: stretch; min-height: 0; height: max(420px, 55vh); }
   }
   /* Small screens: one long page. */
   @media (max-width: 700px), (max-height: 600px) {
     .dk-wrapper { overflow-y: auto; }
     .dk-body { display: flex; flex-direction: column; flex: none; }
-    .dk-col, .dk-views { overflow: visible; }
+    .dk-views { position: static; height: auto; }
     .dk-view { flex: none; height: 420px; }
   }
   .dk-side-say { font-size: 0.85rem; color: var(--color-text-secondary); min-height: 2.8em; display: flex; flex-direction: column; gap: 2px; flex: none; }
@@ -2988,9 +2993,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '<li>Find your offset with the <b>Offset test</b> (above): rounded corners mean raise it; a little hook means lower it.</li>' +
       '<li>Check the result in ncSender’s preview before running it. Opening Drag Knife on a result lets you process it again from the original with other settings.</li></ul>';
   }
-  $('dk-help-open').addEventListener('click', function() { buildHelp(); $('dk-help').hidden = false; $('dk-help-close').focus(); });
-  $('dk-help-close').addEventListener('click', function() { $('dk-help').hidden = true; $('dk-help-open').focus(); });
-  ROOT.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !$('dk-help').hidden) { e.stopPropagation(); $('dk-help').hidden = true; } });
+  // Help covers the dialog: back to the top first (the dialog scrolls as one page), and
+  // the page doesn't scroll under it.
+  function helpShown(on) { if (on) ROOT.scrollTop = 0; ROOT.classList.toggle('dk-help-on', on); $('dk-help').hidden = !on; }
+  $('dk-help-open').addEventListener('click', function() { buildHelp(); helpShown(true); $('dk-help-close').focus(); });
+  $('dk-help-close').addEventListener('click', function() { helpShown(false); $('dk-help-open').focus(); });
+  ROOT.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !$('dk-help').hidden) { e.stopPropagation(); helpShown(false); } });
 
   async function readLoaded() {
     try {
