@@ -4,7 +4,7 @@ const DK = require('../lib/drag-knife.cjs');
 const { compare, compareWithLeads } = require('./sim.cjs');
 
 const R = 0.25;
-const cfg = { offset: R, leadIn: false, rampLength: 2, leadInLength: 1.5 };   // corner swivels only; lead-in tests switch them on
+const cfg = { offset: R, leadIn: false, rampLength: 2, leadInLength: 1.5, lineUp: false };   // corner swivels only; lead-in tests switch them on; the path tests measure the cut, not a line-up
 const TOL = 0.02;
 
 function prog(body, units = 'G21') {
@@ -597,4 +597,56 @@ test('saved knives: named, cleaned, only the knife settings', () => {
   assert.strictEqual(s.knives[1].s.turnDepth, 1);
   assert.deepStrictEqual(DK.readSettings({}).knives, []);
   assert.strictEqual(DK.readSettings({ knives: Array.from({ length: 30 }, (_, i) => ({ name: 'k' + i, s: {} })) }).knives.length, 20);
+});
+
+// ---------- lining the blade up before the first cut ----------
+// a 5-point star like QuickCut's (Z0 first, then down), centred 40 mm in from X0 Y0
+function starProg(cx = 40, cy = 40, ro = 25.4, ri = 9.7) {
+  const pts = [];
+  for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? ri : ro; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+  // start mid-edge, as QuickCut does
+  const s0 = [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2];
+  const ring = pts.slice(1).concat([pts[0], s0]);
+  return { poly: pts, text: prog(['G0 X' + s0[0].toFixed(4) + ' Y' + s0[1].toFixed(4), 'G0 Z2', 'G1 Z0 F60', 'G1 Z-0.05 F60',
+    ...ring.map(([x, y], i) => 'G1 X' + x.toFixed(4) + ' Y' + y.toFixed(4) + (i ? '' : ' F1000'))]) };
+}
+
+test('the first cut: the blade is lined up in the waste first, so no start mark lands on the part', () => {
+  const { distToPath } = require('./sim.cjs');
+  const st = starProg(), R6 = 4.56;
+  const set = { offset: R6, rampLength: 12, leadInLength: 18 };
+  const res = DK.process(st.text, set);
+  assert.strictEqual(res.stats.lineUps, 1);
+  assert.match(res.text, /\(dk: line up the blade first, in the waste\)/);
+  const want = run(st.text, 0.05).filter(s => s.z < 0);
+  const poly = st.poly.map(([x, y]) => [x, y]);
+  // whichever way the blade pointed before, nothing cuts into the star past the line
+  // (a blade starting nearly backwards is a few degrees off after the line-up: a trace
+  // under 0.5 mm, at the very top of the ramp)
+  for (const deg of [0, 90, 180, 270]) {
+    const h0 = { x: Math.cos(deg * Math.PI / 180), y: Math.sin(deg * Math.PI / 180) };
+    const tips = drag(run(res.text, 0.02), R6, 0, h0);
+    const inside = tips.filter(t => inPolygon(t, poly) && distToPath(t, want) > 0.5);
+    assert.strictEqual(inside.length, 0, 'blade from ' + deg + ' deg: ' + inside.length + ' tip samples inside, e.g. ' + JSON.stringify(inside[0]));
+  }
+  // without it, some starting directions mark the inside
+  const plain = DK.process(st.text, Object.assign({ lineUp: false }, set));
+  const marks = [90, 180].map(deg => drag(run(plain.text, 0.02), R6, 0, { x: Math.cos(deg * Math.PI / 180), y: Math.sin(deg * Math.PI / 180) })
+    .filter(t => inPolygon(t, poly) && distToPath(t, want) > 0.5).length);
+  assert.ok(marks.some(n => n > 0), 'the start marks the inside without lining up: ' + marks);
+});
+
+test('no line-up where there is no clear waste: a part on X0 Y0 starting on its edge', () => {
+  const res = DK.process(square, { offset: 2, leadIn: false, rampLength: 4 });
+  assert.ok(!res.stats.lineUps, 'no room below Y0 or beside it inside the square');
+  assert.doesNotMatch(res.text, /line up the blade/);
+});
+
+test('shapes that start at Z0 (QuickCut) still turn in place: the knife lifts first', () => {
+  const two = prog(['G0 X10 Y10', 'G0 Z2', 'G1 Z0 F60', 'G1 Z-0.05', 'G1 X40 Y10 F1000', 'G0 Z2',
+    'G0 X60 Y30', 'G1 Z0 F60', 'G1 Z-0.05', 'G1 X60 Y60 F1000', 'G1 X90 Y60', 'G1 X90 Y30', 'G1 X60 Y30']);
+  const res = DK.process(two, { offset: 4, leadIn: false, lineUp: false });
+  assert.strictEqual(res.stats.turns, 1);
+  const lines = res.text.split('\n'), c2 = lines.findIndex(l => l.startsWith('(dk: cut 2'));
+  assert.match(lines[c2 + 1], /^G0 Z1$/, 'lifts off the top first: ' + lines.slice(c2, c2 + 4).join(' / '));
 });

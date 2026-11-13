@@ -19,8 +19,13 @@ slit in the waste](docs/images/corners.svg)
 - **Turn in place before each cut (on by default):** the blade keeps pointing the way it last cut, even in the air.
   Before the next cut, and where it comes down for a lead-in, the holder lands so the tip is exactly on the start, goes
   down to a shallow turning depth (*Turn at*, 25 % of the depth), swings round so the tip turns in place, then ramps in
-  already lined up: no scratch off the line at the start. The program's first cut can't know which way the blade
-  points, so it only ramps in.
+  already lined up: no scratch off the line at the start. A shape that starts with the knife touching the top (QuickCut
+  comes down to Z0 first) lifts by **Hop height** first.
+- **Line up the blade before the first cut (on by default):** the program's first cut can't know which way the blade
+  points (wherever the last job left it). So before it, the blade drags a short shallow line, 5 offsets long, in the
+  waste beside the start: outside a part, inside a hole, an offset clear of every cut, never past X0 or Y0. The mark
+  from lining up lands in the waste instead of on your part, and the cut starts lined up. Where there's no clear room,
+  the first cut ramps in as before.
 
   ![Before: the second cut starts with the blade still pointing the way the first cut went, and the tip drags off the
   line. Now: the tip lands on the start, turns in place, then ramps in on the line](docs/images/start-turn.svg)

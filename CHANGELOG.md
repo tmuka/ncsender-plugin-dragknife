@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Line up the blade before the first cut** (on): the program's first cut, its blade direction unknown, used to leave a start mark up to an offset long, inside the part or outside depending on where the last job left the blade (a star: up to 5.9 mm inside). Now the blade first drags a short shallow line in clear waste beside the start; on that star the worst start mark is 0.4 mm, at the very top of the ramp.
+- Shapes that start with the knife touching the top (QuickCut comes down to Z0 first) now lift by **Hop height** before moving over, so **Turn the blade in place before each cut** works on them too (it didn't on QuickCut programs).
 - **Your knives:** **Save as a knife…** under **Blade** keeps a knife's **Blade offset** and how it moves under a name, to pick from the **Blade** menu (for more than one knife, or after the offset test); **Delete this knife** removes one. Picking a tile in the offset test suggests saving it.
 
 ## 0.1.3: Offset test and turning in place

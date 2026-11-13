@@ -49,7 +49,8 @@ function run(text, step = 0.01) {
 // The tip trails the axis by r, pulled along (a tractrix). Out of the material
 // the blade keeps whatever way it pointed. The blade starts lined up with the
 // first move it makes in the material.
-function drag(samples, r, surface = 0) {
+// h0: the way the blade points when it first goes in (default: along the first move).
+function drag(samples, r, surface = 0, h0 = null) {
   const tips = [];
   let tip = null, prev = null;
   for (let i = 0; i < samples.length; i++) {
@@ -59,7 +60,7 @@ function drag(samples, r, surface = 0) {
         // find the first XY move in the material
         let j = i; while (j < samples.length - 1 && Math.hypot(samples[j + 1].x - a.x, samples[j + 1].y - a.y) < 1e-6) j++;
         const b = samples[Math.min(j + 1, samples.length - 1)], d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-        tip = { x: a.x - r * (b.x - a.x) / d, y: a.y - r * (b.y - a.y) / d };
+        tip = h0 ? { x: a.x - r * h0.x, y: a.y - r * h0.y } : { x: a.x - r * (b.x - a.x) / d, y: a.y - r * (b.y - a.y) / d };
       }
     } else if (a.z < surface - 1e-9) {
       const dx = a.x - tip.x, dy = a.y - tip.y, d = Math.hypot(dx, dy);
