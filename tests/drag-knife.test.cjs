@@ -413,3 +413,84 @@ test('a closed shape entered by a ramp along its own path (ncCAM) is closed, not
   // an open path that happens to end near its start is left open
   assert.strictEqual(DK.process(prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 Y0 F1000', 'G1 X10 Y10', 'G1 X0.5 Y0.2']), cfg).stats.closed, 0);
 });
+
+// ---------- the offset test ----------
+const { run, drag } = require('./sim.cjs');
+function inPolygon(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p.y) !== (b[1] > p.y) && p.x < (b[0] - a[0]) * (p.y - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+function tileProgram(t, size, depth = 0.3) {
+  const pts = DK.testTile(t.x, t.y, size);
+  return prog(['G0 X' + pts[0][0] + ' Y' + pts[0][1], 'G1 Z-' + depth + ' F200', ...pts.slice(1).map(p => 'G1 X' + p[0] + ' Y' + p[1] + ' F1000')]);
+}
+
+test('offset test: offsets centred on the guess, all above 0', () => {
+  assert.deepStrictEqual(DK.testOffsets(6, 0.9, 5), [4.2, 5.1, 6, 6.9, 7.8]);
+  assert.deepStrictEqual(DK.testOffsets(0.25, 0.05, 3), [0.2, 0.25, 0.3]);
+  const low = DK.testOffsets(0.25, 0.1, 7);
+  assert.ok(low.every(o => o > 0), 'all positive: ' + low);
+  assert.strictEqual(low.length, 7);
+});
+
+test('offset test: each tile, processed with its own offset, is cut as drawn', () => {
+  // swivels only, so the simulator compares the tip with the tile directly
+  for (const o of [0.25, 2]) {
+    const t = DK.offsetTest({ offsets: [o], size: 10, depth: 0.3 }, { leadIn: false, rampLength: 2 });
+    const tile = t.tiles[0], want = tileProgram(tile, 10);
+    const tips = drag(run(t.text, 0.005), o);
+    const pts = DK.testTile(tile.x, tile.y, 10);
+    const onTile = tips.filter(p => p.y > tile.y - 0.5);   // the ticks are below the tile
+    const wantS = run(want, 0.05).filter(s => s.z < 0);
+    const { distToPath } = require('./sim.cjs');
+    const dev = Math.max(...onTile.map(p => distToPath(p, wantS)));
+    assert.ok(dev < TOL, 'offset ' + o + ': tile deviation ' + dev);
+    // the sharp point and the square corners are reached
+    for (const c of [pts[1], pts[3], pts[5]]) {
+      const d = Math.min(...onTile.map(p => Math.hypot(p.x - c[0], p.y - c[1])));
+      assert.ok(d < TOL, 'offset ' + o + ': corner ' + c + ' missed by ' + d);
+    }
+  }
+});
+
+test('offset test: n ticks under tile n, tile 0 uncorrected, a processed program within the line rules', () => {
+  const t = DK.offsetTest({ offsets: [4.2, 5.1, 6], size: 18, depth: 0.5, uncorrected: true }, {});
+  assert.deepStrictEqual(t.tiles.map(x => x.n), [0, 1, 2, 3]);
+  assert.ok(DK.isProcessed(t.text), 'marked processed, so it is not processed again');
+  for (const l of t.text.split('\n')) {
+    assert.ok(l.length <= 79, 'too long: ' + l);
+    assert.ok(!/[^\x20-\x7e]|[!?~]/.test(l), 'not plain: ' + l);
+  }
+  // count the cuts below each tile: plunges whose X is in the tile's span and Y under it
+  const samples = run(t.text, 0.05);
+  const plungesAt = [];
+  for (let i = 1; i < samples.length; i++) if (samples[i].z < 0 && samples[i - 1].z >= 0) plungesAt.push(samples[i]);
+  for (const tile of t.tiles) {
+    const under = plungesAt.filter(p => p.x > tile.x + 18 * 0.1 && p.x < tile.x + 18 * 0.9 && p.y < tile.y - 1);
+    assert.strictEqual(under.length, tile.n, 'tile ' + tile.n + ' ticks ' + under.length);
+  }
+  // tile 0 is the raw tile: no hops, a straight plunge
+  const zero = t.text.split('(tile 1')[0].split('(tile 0')[1];
+  assert.match(zero, /G1 Z-0\.5 F/);
+});
+
+test('offset test: with lead-ins, no slit cuts into any tile', () => {
+  // A slit into a tile would reach well inside it; the blade still lining up after a
+  // lead-in strays about 1 mm at a 6 mm offset (the lead-in is 3 offsets long).
+  for (const [o, size] of [[6, 18], [0.5, 10]]) {
+    const t = DK.offsetTest({ offsets: [o, o, o], size, depth: 0.5 }, o === 6 ? {} : { offset: o, leadInLength: 3, rampLength: 4 });
+    const { distToPath } = require('./sim.cjs');
+    const tips = drag(run(t.text, 0.01), o);
+    let worst = 0;
+    for (const tile of t.tiles) {
+      const poly = DK.testTile(tile.x, tile.y, size).slice(0, -1), edge = poly.concat([poly[0]]).map(p => ({ x: p[0], y: p[1] }));
+      for (const p of tips) if (inPolygon(p, poly)) worst = Math.max(worst, distToPath(p, edge));
+    }
+    assert.ok(worst < o * 0.3, 'offset ' + o + ': the tip reaches ' + worst.toFixed(3) + ' inside a tile');
+    assert.strictEqual(t.text.split('\n').filter(l => /^\(tile /.test(l)).length, 3);
+  }
+});

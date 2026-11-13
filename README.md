@@ -63,11 +63,21 @@ result offers **Process again from the original**, read from File Manager, with 
 isn't in File Manager (a QuickCut program not saved there) can only be processed again with **Save to File Manager**
 on: it saves the original and each result to File Manager › Drag Knife.
 
+## Finding your blade offset
+
+Under the settings, **Offset test** loads a row of test tiles to cut in scrap (X0 Y0 on its front left corner, Z0 on
+its top). Each tile is a square with a sharp 40° point on top, processed with a different blade offset around yours
+and your other settings, and numbered by short ticks under it; tile 0 at the left, if you keep it, is cut as drawn
+with no correction. Cut it, peel it, and open Drag Knife again: under **Which tile cut best?** pick the tile with the
+square corners and the sharpest point. That sets your blade offset. Rounded corners and a blunt point mean the offset
+is too small; little hooks past the corners mean it's too big. **Narrow it down** then sets a step a third as big for
+a finer row around your pick. Step, number of tiles (2 to 9), tile width, cut depth and feed are set in the card.
+
 ## Use
 
 1. Load the program for the cut. Z0 should be the top of the material, and the cut is the shape you want.
 2. Open **Drag Knife** from the tools menu and set the **Blade offset**: about 0.25 mm for a 45° blade, 0.5 mm for
-   a 60° blade.
+   a 60° blade, or find it with the **Offset test** (above).
 3. Press **Process for drag knife**. The rewritten program loads as `<name>-dragknife.nc`. Check it in the preview,
    then run it.
 

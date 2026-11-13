@@ -129,6 +129,15 @@
   .dk-note[data-state="bad"] { color: var(--dk-danger); }
   .dk-note[data-state="warn"] { color: var(--dk-warn); }
   .dk-note ul { margin: 6px 0 0; padding-left: 20px; }
+  .dk-test-card summary { cursor: pointer; list-style: revert; }
+  .dk-test-card summary .dk-card-title { display: inline; }
+  .dk-test-body { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+  .dk-test-body p.dk-hint { margin: 0 !important; }
+  .dk-test-pick { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--color-border); padding-top: 12px; }
+  .dk-test-tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .dk-test-tiles .dk-btn { min-height: 40px; padding: 4px 12px !important; flex-direction: column; gap: 0; line-height: 1.2; }
+  .dk-test-tiles .dk-btn small { font-size: 0.75em; opacity: 0.8; }
+  .dk-test-tiles .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; cursor: pointer; }
   .dk-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--color-accent); }
 </style>
@@ -202,6 +211,34 @@
         title="After a lifted swivel, the distance over which the blade goes back to full depth."></div>
     </div>
     <div class="dk-hint">Lengths are in your units preference; type either kind (<code>1/4"</code>, <code>6mm</code>, <code>2mm+1/16"</code>). They're converted for the program's units.</div>
+  </section>
+<section class="dk-card dk-test-card">
+    <details id="dk-test">
+      <summary><h3 class="dk-card-title">Offset test: find your blade offset</h3></summary>
+      <div class="dk-test-body">
+        <p class="dk-hint">Cuts a row of test shapes in scrap, each with a different blade offset around yours and your other settings, numbered by short ticks under them. Cut it, peel it, and pick the tile with the sharpest corners. X0 Y0 on the scrap&rsquo;s front left corner, Z0 on its top.</p>
+        <div class="dk-grid">
+          <div class="dk-field"><label for="dk-testStep">Step (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testStep" type="text" data-unit="length" data-min="0" inputmode="decimal"
+            title="The difference in offset from one tile to the next. Empty or 0: 15 % of your blade offset."></div>
+          <div class="dk-field"><label for="dk-testCount">Tiles</label><input class="dk-input" id="dk-testCount" inputmode="numeric" title="How many offsets to try, 2 to 9, centred on your blade offset."></div>
+          <div class="dk-field"><label for="dk-testSize">Tile width (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testSize" type="text" data-unit="length" data-min="0" inputmode="decimal"
+            title="The width of each test shape. Empty or 0: 4 times the largest offset, at least 10 mm."></div>
+          <div class="dk-field"><label for="dk-testDepth">Cut depth (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testDepth" type="text" data-unit="length" data-min="0" inputmode="decimal"
+            title="How deep the blade cuts below the material top: through the material, just into the backing."></div>
+          <div class="dk-field"><label for="dk-testFeed">Feed (<span class="dk-unit">mm</span>/min)</label><input class="dk-input" id="dk-testFeed" type="text" data-unit="length" data-min="0" inputmode="decimal"
+            title="Cutting feed. Plunges go at a third of it."></div>
+        </div>
+        <label class="dk-check"><input type="checkbox" id="dk-testUncorrected"><span>Also cut tile 0 as drawn, uncorrected, at the left<span class="dk-hint" style="display:block">Its corners round off by about the blade offset: what the plugin corrects.</span></span></label>
+        <div class="dk-hint" id="dk-test-plan" aria-live="polite"></div>
+        <div><button type="button" class="dk-btn" id="dk-test-load">Load offset test</button></div>
+        <div class="dk-test-pick" id="dk-test-pick" hidden>
+          <div class="dk-sub">Which tile cut best?</div>
+          <div class="dk-hint">Too small: corners rounded, the point blunt. Too big: little hooks past each corner. Right: square corners and a sharp point. Count the ticks under it.</div>
+          <div class="dk-test-tiles" id="dk-test-tiles" role="group" aria-label="Pick the best tile"></div>
+          <div class="dk-hint" id="dk-test-picked" aria-live="polite"></div>
+        </div>
+      </div>
+    </details>
   </section>
     </div>
     <div class="dk-col dk-views">
@@ -587,6 +624,9 @@ var DragKnife = (function () {
     leadInLength: 18,    // mm; the lead-in starts this far behind the corner, on the next line extended (about 3 offsets)
     hopHeight: 1,        // mm above the material top while hopping to the lead-in
     saveToFileManager: false,   // the dialog: also save results (and temporary originals) to File Manager › Drag Knife
+    // the offset test (the dialog): step 0 = 15 % of the offset, size 0 = from the offsets
+    testStep: 0, testCount: 5, testSize: 0, testDepth: 0.3, testFeed: 1000, testUncorrected: true,
+    lastTest: '',        // the offsets of the last test loaded, "4.2,5.1,6", for picking the best tile
     protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
   };
   var PROTECT = ['auto', 'inside', 'outside', 'none'];
@@ -689,6 +729,7 @@ var DragKnife = (function () {
     var s = {};
     for (var k in DEFAULTS) {
       if (typeof DEFAULTS[k] === 'boolean') { s[k] = raw && typeof raw[k] === 'boolean' ? raw[k] : DEFAULTS[k]; continue; }
+      if (k === 'lastTest') { s[k] = raw && typeof raw[k] === 'string' && /^[\d.,]*$/.test(raw[k]) ? raw[k] : ''; continue; }
       if (k === 'protect') { s[k] = raw && PROTECT.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       var n = raw && raw[k] !== undefined && raw[k] !== '' ? Number(raw[k]) : DEFAULTS[k];
       s[k] = isFinite(n) ? n : DEFAULTS[k];
@@ -747,6 +788,7 @@ var DragKnife = (function () {
 
   // The source a result names in its header ("from ..."), or null.
   function processedFrom(text) { var m = /\(dragknife [^)]*\bfrom ([^,)]*)/i.exec(text); return m ? m[1].trim() : null; }
+  function isOffsetTest(text) { return /\(\s*dragknife processed: offset test/i.test(text); }
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
 
   // process(text, settings) -> { text, stats }   (throws Error('Line n: ...') on what it won't rewrite)
@@ -1331,7 +1373,88 @@ var DragKnife = (function () {
     });
   }
 
+  // ---------- the offset test ----------
+  // Offsets for a test: count values centred on `center`, `step` apart, all above 0
+  // (shifted up when the low end would reach 0), rounded to 0.01 mm.
+  function testOffsets(center, step, count) {
+    count = Math.max(2, Math.min(9, Math.round(count) || 5));
+    step = step > 0 ? step : Math.max(0.01, center * 0.15);
+    var lo = center - step * (count - 1) / 2;
+    if (lo < step / 2) lo = step / 2 > 0.01 ? step / 2 : 0.01;
+    var out = [];
+    for (var i = 0; i < count; i++) out.push(Math.round((lo + i * step) * 100) / 100);
+    return out;
+  }
+  // A tile size that suits the offsets: 4 of the largest, at least 10 mm, rounded.
+  function testSize(offs) { return Math.max(10, Math.round(Math.max.apply(null, offs) * 4)); }
+  // The test tile, as the blade tip should cut it, from its bottom left corner: a
+  // square bottom (two 90 degree corners), walls, a slight bend into a roof (a swivel's
+  // worth), and a 40 degree point at the top (sharp: a lead-in or a big swivel).
+  // Started mid-bottom, so the start isn't on a corner. In mm.
+  function testTile(x0, y0, s) {
+    var wall = s * 0.6, h = (s / 2) / Math.tan(20 * Math.PI / 180);
+    return [[x0 + s / 2, y0], [x0 + s, y0], [x0 + s, y0 + wall], [x0 + s / 2, y0 + wall + h], [x0, y0 + wall], [x0, y0], [x0 + s / 2, y0]];
+  }
+  // offsetTest(opts, settings) -> { text, offsets, tiles: [{ n, offset, x }], width, height }
+  // A row of test tiles along +X from X0 Y0 (the scrap's front left corner), each
+  // processed with its own blade offset and the other settings as given; n short
+  // ticks under tile n say which it is. Tile 0, when asked for, is cut as drawn
+  // (no correction), unmarked, at the left. In mm (G21), Z from settings.surfaceZ.
+  // opts: { offsets: [mm], size: mm, depth: mm, uncorrected: bool, feed: mm/min }
+  function offsetTest(opts, rawSettings) {
+    var cfg = active(rawSettings);
+    var offs = (opts.offsets || []).filter(function (o) { return o > 0; });
+    if (!offs.length) throw new Error('No offsets to test.');
+    var s = opts.size > 0 ? opts.size : testSize(offs), depth = opts.depth > 0 ? opts.depth : 0.3;
+    var feed = opts.feed > 0 ? opts.feed : 1000, plunge = Math.max(50, Math.round(feed / 3));
+    var top = cfg.surfaceZ, zCut = top - depth, zSafe = top + Math.max(5, cfg.hopHeight + 3);
+    var maxOff = Math.max.apply(null, offs);
+    // room between tiles for the lead-in slits and swivels, so no tile cuts its neighbour
+    var gap = Math.max(s * 0.5, (cfg.leadInAngle > 0 ? cfg.leadInLength : 0) + maxOff * 2 + 2);
+    var tickL = s * 0.25, tickGap = Math.max(s * 0.2, maxOff + 1), y0 = gap, yShape = y0 + tickL + tickGap;
+    function path(pts) {
+      var L = ['G0 X' + fmt(pts[0][0]) + ' Y' + fmt(pts[0][1]), 'G1 Z' + fmt(zCut) + ' F' + plunge];
+      for (var i = 1; i < pts.length; i++) L.push('G1 X' + fmt(pts[i][0]) + ' Y' + fmt(pts[i][1]) + (i === 1 ? ' F' + feed : ''));
+      L.push('G0 Z' + fmt(zSafe));
+      return L;
+    }
+    var body = [], tiles = [], x = gap;
+    if (opts.uncorrected) {
+      body.push('(tile 0: as drawn, no correction)');
+      body = body.concat(path(testTile(x, yShape, s)));
+      tiles.push({ n: 0, offset: 0, x: x, y: yShape });
+      x += s + gap;
+    }
+    offs.forEach(function (o, k) {
+      var n = k + 1, raw = ['G0 Z' + fmt(zSafe)].concat(path(testTile(x, yShape, s)));
+      // n ticks under the tile, spread across its middle
+      for (var t = 0; t < n; t++) {
+        var tx = x + s * 0.2 + (n === 1 ? s * 0.3 : s * 0.6 * t / (n - 1));
+        raw = raw.concat(path([[tx, y0], [tx, y0 + tickL]]));
+      }
+      var c = {}; for (var key in cfg) c[key] = cfg[key];
+      c.offset = o;
+      var res = processPass(raw.join('\n') + '\n', c, null, (function () {
+        // auto: the tile is a part; its ticks are open paths
+        if (c.protect !== 'auto' || !(c.leadInAngle > 0)) return {};
+        return { holes: analyzeWith(raw.join('\n') + '\n', c, null).holes };
+      })());
+      body.push('(tile ' + n + ': offset ' + fmt(o) + 'mm)');
+      res.text.split('\n').forEach(function (l) { if (l && !/^\(dragknife/i.test(l)) body.push(l); });
+      tiles.push({ n: n, offset: o, x: x, y: yShape });
+      x += s + gap;
+    });
+    var height = yShape + s * 0.6 + (s / 2) / Math.tan(20 * Math.PI / 180) + gap;
+    var head = headerLines(['processed: offset test, ' + offs.length + ' tiles left to right']
+      .concat(offs.map(function (o, k) { return 'tile ' + (k + 1) + ' ' + fmt(o) + 'mm'; }))
+      .concat(opts.uncorrected ? ['tile 0 at the left uncorrected'] : [],
+        ['X0 Y0 front left of scrap', 'Z' + fmt(top) + ' its top', 'depth ' + fmt(depth) + 'mm', 'size ' + fmt(Math.round(x * 10) / 10) + ' x ' + fmt(Math.round(height * 10) / 10) + 'mm']));
+    var text = head.concat(['G21 G90 G17', 'G0 Z' + fmt(zSafe)], body, ['G0 Z' + fmt(zSafe), 'M30']).join('\n') + '\n';
+    return { text: text, offsets: offs, tiles: tiles, width: x, height: height, size: s, gap: gap };
+  }
+
   return {
+    offsetTest: offsetTest, testOffsets: testOffsets, testTile: testTile, isOffsetTest: isOffsetTest, testSize: testSize,
     sourceLabel: function (name) { return commentText(String(name).replace(/[()]/g, ''), 50); }, processedFrom: processedFrom,
     DEFAULTS: DEFAULTS, process: process, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
     parseLine: parseLine, stripSpindleWords: stripSpindleWords, _internal: { turn: turn, tangentAt: tangentAt, elemLen: elemLen, splitAt: splitAt, sweepOf: sweepOf, centerFromR: centerFromR }
@@ -1340,7 +1463,9 @@ var DragKnife = (function () {
 if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
 /* END lib/drag-knife.cjs */
 
-  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'rampLength', 'liftOut', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp'];
+  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'rampLength', 'liftOut', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp',
+    'testStep', 'testCount', 'testSize', 'testDepth', 'testFeed'];
+  var AUTO_EMPTY = { testStep: 1, testSize: 1 };   // empty (or 0) = worked out from the offsets
   // liftFraction is shown as a percentage.
   function shown(k, val) { return k === 'liftFraction' ? Math.round(val * 1000) / 10 : val; }
   function stored(k, val) { return k === 'liftFraction' ? val / 100 : val; }
@@ -1349,15 +1474,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   // Lengths are stored in mm and shown in the operator's units (ncSender's unitsPreference),
   // read by the ncsender-unit-input library: 1/4", 6mm, 2mm+1/16" all work.
   var NU = NcUnitInput, imperial = false;
-  var LENGTHS = { offset: 1, rampLength: 1, liftOut: 1, leadInLength: 1, hopHeight: 1, liftRamp: 1 };
+  var LENGTHS = { offset: 1, rampLength: 1, liftOut: 1, leadInLength: 1, hopHeight: 1, liftRamp: 1, testStep: 1, testSize: 1, testDepth: 1, testFeed: 1 };
   function showField(k) {
     var el = $('dk-' + k);
-    el.value = LENGTHS[k] ? NU.formatMm(cfg[k], imperial) : String(shown(k, cfg[k]));
+    if (AUTO_EMPTY[k]) el.placeholder = 'auto';
+    el.value = AUTO_EMPTY[k] && !(cfg[k] > 0) ? '' : LENGTHS[k] ? NU.formatMm(cfg[k], imperial) : String(shown(k, cfg[k]));
     el.classList.remove('dk-bad'); el.removeAttribute('aria-invalid');
   }
   function showUnits() {
     ROOT.querySelectorAll('.dk-unit').forEach(function(u) { u.textContent = imperial ? 'in' : 'mm'; });
     Object.keys(LENGTHS).forEach(showField);
+    if (typeof testPlan === 'function' && $('dk-test-plan')) { testPlan(); showPick(); }
   }
   FIELDS.forEach(function(k) {
     var el = $('dk-' + k);
@@ -1365,9 +1492,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     // Each value is committed once, however it's left (Enter, Tab, a tap elsewhere).
     function commit() {
       var n, problem = null;
-      if (LENGTHS[k]) { n = NU.textToMm(el.value, imperial); if (n === null) problem = NU.unitValueProblem(el.value) || 'not a length'; }
+      if (AUTO_EMPTY[k] && String(el.value).trim() === '') n = 0;
+      else if (LENGTHS[k]) { n = NU.textToMm(el.value, imperial); if (n === null) problem = NU.unitValueProblem(el.value) || 'not a length'; }
       else { var tx = String(el.value).replace(',', '.').trim(); n = tx === '' ? NaN : Number(tx); }
-      var bad = n === null || !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (k === 'liftFraction' && n > 100);
+      var bad = n === null || !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (k === 'liftFraction' && n > 100) ||
+        (k === 'testCount' && (n < 2 || n > 9 || n !== Math.round(n))) || ((k === 'testDepth' || k === 'testFeed') && !(n > 0));
+      if (k === 'testCount' && bad) problem = 'a whole number from 2 to 9';
       el.classList.toggle('dk-bad', bad);
       if (bad) { el.setAttribute('aria-invalid', 'true'); el.title = problem || el.title; return; }
       el.removeAttribute('aria-invalid');
@@ -1375,7 +1505,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       if (Math.abs(v - cfg[k]) < 1e-9) return;
       cfg[k] = v;
       save();
+      if (/^test/.test(k)) { testPlan(); return; }
       refresh();
+      if (k === 'offset') { testPlan(); showPick(); }
     }
     el.addEventListener('focusout', commit);
     el.addEventListener('change', commit);
@@ -1426,6 +1558,80 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     if (cfg.leadIn && !(cfg.leadInAngle > 0)) { cfg.leadInAngle = DragKnife.DEFAULTS.leadInAngle; $('dk-leadInAngle').value = String(cfg.leadInAngle); }
     save(); leadInShown(); refresh();
   });
+  // ---- the offset test ----
+  var testBox = $('dk-testUncorrected');
+  testBox.checked = !!cfg.testUncorrected;
+  testBox.addEventListener('change', function() { cfg.testUncorrected = testBox.checked; save(); testPlan(); });
+  function testOpts() {
+    var offs = DragKnife.testOffsets(cfg.offset, cfg.testStep, cfg.testCount);
+    return { offsets: offs, size: cfg.testSize > 0 ? cfg.testSize : DragKnife.testSize(offs), depth: cfg.testDepth, feed: cfg.testFeed, uncorrected: cfg.testUncorrected };
+  }
+  function mmList(list) { return list.map(function(o) { return NU.formatMm(o, imperial); }).join(', ') + (imperial ? ' in' : ' mm'); }
+  // What the test will cut, before it's loaded.
+  function testPlan() {
+    var plan = $('dk-test-plan'), btn = $('dk-test-load');
+    if (!(cfg.offset > 0)) { plan.textContent = 'Set a blade offset first: the test tries offsets around it.'; btn.disabled = true; return null; }
+    try {
+      var o = testOpts(), t = DragKnife.offsetTest(o, cfg);
+      plan.textContent = plural(t.offsets.length, 'tile') + ': ' + mmList(t.offsets) + (o.uncorrected ? ', and tile 0 uncorrected' : '') + '; each ' + lengthSay(o.size) +
+        ' wide. Needs about ' + NU.formatMm(Math.ceil(t.width), imperial) + ' × ' + lengthSay(Math.ceil(t.height)) + ' of scrap.';
+      btn.disabled = false;
+      return t;
+    } catch (e) { plan.textContent = e.message || String(e); btn.disabled = true; return null; }
+  }
+  // After a test: a button per tile; picking one sets the blade offset.
+  function showPick() {
+    var offs = String(cfg.lastTest || '').split(',').map(Number).filter(function(o) { return o > 0; });
+    $('dk-test-pick').hidden = !offs.length;
+    var box = $('dk-test-tiles');
+    box.innerHTML = '';
+    offs.forEach(function(o, k) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'dk-btn dk-ghost';
+      b.innerHTML = 'Tile ' + (k + 1) + '<small>' + esc(lengthSay(o)) + '</small>';
+      b.setAttribute('aria-pressed', Math.abs(o - cfg.offset) < 1e-6 ? 'true' : 'false');
+      b.addEventListener('click', function() { pickTile(offs, k); });
+      box.appendChild(b);
+    });
+  }
+  function pickTile(offs, k) {
+    var o = offs[k], step = offs.length > 1 ? (offs[offs.length - 1] - offs[0]) / (offs.length - 1) : 0;
+    cfg.offset = o; showField('offset'); bladeShown(); save(); refresh(); showPick(); testPlan();
+    var end = offs.length > 2 && (k === 0 || k === offs.length - 1);
+    var said = $('dk-test-picked');
+    said.innerHTML = 'Blade offset set to <b>' + esc(lengthSay(o)) + '</b> (tile ' + (k + 1) + '). ' +
+      (end ? 'That’s the end of the row, so the best may be beyond it: load the test again, centred on it now. '
+        : 'For a closer look, cut a finer test around it: ') +
+      '<button type="button" class="dk-btn dk-ghost" id="dk-test-narrow">' + (end ? 'Same step, centred here' : 'Narrow it down (step ' + esc(lengthSay(Math.max(0.01, Math.round(step / 3 * 100) / 100))) + ')') + '</button>';
+    $('dk-test-narrow').addEventListener('click', function() {
+      if (!end && step > 0) { cfg.testStep = Math.max(0.01, Math.round(step / 3 * 100) / 100); showField('testStep'); save(); }
+      testPlan();
+      said.textContent = 'Ready: ' + $('dk-test-plan').textContent + ' Press Load offset test.';
+      $('dk-test-load').focus();
+    });
+  }
+  $('dk-test-load').addEventListener('click', async function() {
+    var btn = $('dk-test-load');
+    btn.disabled = true;
+    try {
+      await readLoaded();
+      if (loaded && (loaded.status === 'running' || loaded.status === 'paused')) throw new Error('A job is ' + loaded.status + '. Load the test when it has finished.');
+      var t = testPlan();
+      if (!t) throw new Error($('dk-test-plan').textContent);
+      var lo = t.offsets[0], hi = t.offsets[t.offsets.length - 1];
+      var name = 'DK-OffsetTest_' + t.offsets.length + 'x_' + lo + '-' + hi + 'mm.nc';
+      var up = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: name, content: t.text, sourceFile: null }) });
+      if (!up.ok) throw new Error('Couldn’t load the test (ncSender answered ' + up.status + ').');
+      cfg.lastTest = t.offsets.join(','); save(); showPick();
+      program = null;
+      note('ok', 'Loaded <span class="dk-file">' + esc(name) + '</span>: ' + esc($('dk-test-plan').textContent) + ' Cut it with X0 Y0 on the scrap’s front left corner and Z0 on its top, then open Drag Knife again and pick the best tile under Offset test.');
+      setTimeout(function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); }, 1500);
+    } catch (e) {
+      note('bad', esc(e.message || String(e)));
+    } finally { btn.disabled = false; }
+  });
+
   function save() {
     fetch(BASE_URL + '/api/plugins/' + PLUGIN_ID + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).catch(function() {});
   }
@@ -1470,6 +1676,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var busy = loaded && (loaded.status === 'running' || loaded.status === 'paused');
     var said = $('dk-file-from');
     if (!p) { said.textContent = ''; btn.textContent = 'Process for drag knife'; return; }
+    if (p.processed && p.cur && DragKnife.isOffsetTest(p.cur)) {
+      btn.textContent = 'Offset test loaded';
+      btn.disabled = true;
+      said.textContent = ' (the offset test: cut it, then pick the best tile under Offset test)';
+      $('dk-test').open = true;
+      return;
+    }
     if (p.processed) {
       btn.textContent = 'Process again from the original';
       btn.disabled = p.missing || busy;
@@ -1754,7 +1967,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         return n % 2 ? 'bad' : 'lead';
       },
       pathLen: (function() { var L = 0; for (var q = 1; q < samples.length; q++) L += Math.hypot(samples[q].x - samples[q - 1].x, samples[q].y - samples[q - 1].y); return L; })(),
-      processedAlready: done, k: k, R: R, span: span, stats: done ? null : res.stats, units: units
+      processedAlready: done, offsetTest: done && DragKnife.isOffsetTest(text), k: k, R: R, span: span, stats: done ? null : res.stats, units: units
     };
   }
 
@@ -1770,7 +1983,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     svg.removeAttribute('data-done');
     var st = sc.stats;
-    $('dk-demo-stats').textContent = sc.processedAlready ? 'The loaded program is already processed: load the original to see these settings on it.'
+    $('dk-demo-stats').textContent = sc.offsetTest ? 'The offset test: each tile is cut with its own blade offset, but the preview drags the blade at yours (' + lengthSay(cfg.offset) + '), so only that tile is drawn true; the others show its corners too small or too big.'
+      : sc.processedAlready ? 'The loaded program is already processed: load the original to see these settings on it.'
       : (cfg.leadIn ? plural(st.leadIns, 'lead-in') + ', ' + plural(st.swivels, 'swivel') + (cfg.protect === 'auto' ? ', ' + plural(st.holes, 'hole') + ' found' : '') + '.'
         : 'Lead-ins are off: ' + plural(st.swivels, 'swivel') + '.') +
       (st.tightArcs ? ' ' + plural(st.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (st.tightArcs === 1 ? 'it.' : 'them.') : '');
@@ -2157,6 +2371,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var partProg = DEMO_PROG, Rp = 1.2;
     var auto = DragKnife.process(partProg, { offset: Rp, leadIn: true, leadInAngle: 60, leadInLength: 5, hopHeight: 2, protect: 'auto', rampLength: 3 }).text;
     var none = DragKnife.process(partProg, { offset: Rp, leadIn: true, leadInAngle: 60, leadInLength: 5, hopHeight: 2, protect: 'none', rampLength: 3 }).text;
+    // The offset test: one tile cut by a blade that trails 2 mm, processed with too small,
+    // the right and too big an offset (swivels only, so the corners show plainly).
+    var Rt = 2, tp = DragKnife.testTile(0, 0, 12), tileProg = ['G21 G90 G17', 'G0 Z5', 'G0 X' + tp[0][0] + ' Y' + tp[0][1], 'G1 Z-0.5 F300']
+      .concat(tp.slice(1).map(function(p) { return 'G1 X' + p[0].toFixed(3) + ' Y' + p[1].toFixed(3) + ' F1000'; }), ['G0 Z5', 'M30']).join('\n') + '\n';
+    function tileWith(o) { return DragKnife.process(tileProg, { offset: o, leadIn: false, rampLength: 4, liftOut: 1 }).text; }
     function fig(title, svg, cap, wide) { return '<figure class="dk-fig' + (wide ? ' dk-fig-wide' : '') + '"><b>' + title + '</b>' + svg + '<figcaption>' + cap + '</figcaption></figure>'; }
     var key = '<div class="dk-help-key"><span><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>the cut you want</span>' +
       '<span><span class="dk-key" style="color: ' + HELP_C.axis + '; border-top-width: 1px"></span>holder (spindle) path, dotted in the air</span>' +
@@ -2176,6 +2395,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '</div>' +
       '<h4>Into and out of each cut</h4><p>The blade can’t turn while it’s buried, so each cut starts at the material top and ramps down along the path (<i>Ramp in over</i>), lining up while shallow. A closed shape then recuts its start at full depth (the overcut) and rises while still moving (<i>Lift out over</i>), so it drops out cleanly.</p><div class="dk-figs">' +
       fig('Depth along one closed square', helpProfile(), 'Ramp in, the cut at depth, the overcut past the start, and the lift out.', true) + '</div>' +
+      '<h4>Find your blade offset: the offset test</h4><p>Under the settings, <b>Offset test</b> loads a row of tiles like these, each processed with a different offset around yours (and numbered by ticks under it). Cut it in scrap, peel it, and pick the tile with the sharpest corners and point: that sets your blade offset. <b>Narrow it down</b> then cuts a finer row around it. Here the blade really trails ' + lengthSay(Rt) + '; off-line cuts show in amber and red.</p><div class="dk-figs">' +
+      fig('Offset too small (' + lengthSay(Rt * 0.6) + ')', helpFigure(tileProg, tileWith(Rt * 0.6), Rt), 'The corners round off inside and the point is blunt: raise it.') +
+      fig('Right (' + lengthSay(Rt) + ')', helpFigure(tileProg, tileWith(Rt), Rt), 'Square corners and a sharp point.') +
+      fig('Offset too big (' + lengthSay(Rt * 1.6) + ')', helpFigure(tileProg, tileWith(Rt * 1.6), Rt), 'The tip overshoots each corner and hooks back: lower it.') +
+      '</div>' +
       '<h4>Settings</h4><ul>' +
       '<li><b>Blade / Blade offset:</b> how far the tip trails the holder. Large-format CNC drag knives trail by several mm (6 mm by default); vinyl-cutter style blades about 0.25 mm (30° and 45°) or 0.5 mm (60°). Too small and corners round off; too big and they get a hook.</li>' +
       '<li><b>Swivel above:</b> turns sharper than this get a swivel. Gentler bends just drag.</li>' +
@@ -2186,7 +2410,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '<li><b>Save to File Manager:</b> keeps each result, and the original when it isn’t saved already, so it can be processed again later.</li></ul>' +
       '<h4>Tips</h4><ul>' +
       '<li>Make the program for the line you want cut: in QuickCut cut <i>on the line</i>, or set the bit diameter to 0. An outside cut with a router bit rounds the points before Drag Knife sees them.</li>' +
-      '<li>Find your offset with a test square: if corners are rounded, raise it; if they have a little hook, lower it.</li>' +
+      '<li>Find your offset with the <b>Offset test</b> (above): rounded corners mean raise it; a little hook means lower it.</li>' +
       '<li>Check the result in ncSender’s preview before running it. Opening Drag Knife on a result lets you process it again from the original with other settings.</li></ul>';
   }
   $('dk-help-open').addEventListener('click', function() { buildHelp(); $('dk-help').hidden = false; $('dk-help-close').focus(); });
@@ -2295,6 +2519,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
+  testPlan(); showPick();
   readLoaded().then(function() { showSource(); checkAuto(); side(); });
 })();
 </script>
