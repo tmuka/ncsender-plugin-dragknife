@@ -241,7 +241,7 @@
         <div><button type="button" class="dk-btn" id="dk-test-load">Load offset test</button></div>
         <div class="dk-test-pick" id="dk-test-pick" hidden>
           <div class="dk-sub">Which tile cut best?</div>
-          <div class="dk-hint">Too small: corners rounded, the point blunt. Too big: little hooks past each corner. Right: square corners and a sharp point. Count the ticks under it.</div>
+          <div class="dk-hint">Too small: corners rounded, the point blunt. Too big: little hooks past each corner. Right: square corners and a sharp point. Count the ticks under it; tile 0 at the left (if you cut it) has none and is uncorrected.</div>
           <div class="dk-test-tiles" id="dk-test-tiles" role="group" aria-label="Pick the best tile"></div>
           <div class="dk-hint" id="dk-test-picked" aria-live="polite"></div>
         </div>
@@ -1690,10 +1690,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
   // After a test: a button per tile; picking one sets the blade offset.
   function showPick() {
-    var offs = String(cfg.lastTest || '').split(',').map(Number).filter(function(o) { return o > 0; });
+    // "0,..." = the test had tile 0; tests saved before that mark go by the switch
+    var all = String(cfg.lastTest || '').split(',').map(Number), zero = all[0] === 0 || (all[0] > 0 && !!cfg.testUncorrected);
+    var offs = all.filter(function(o) { return o > 0; });
     $('dk-test-pick').hidden = !offs.length;
     var box = $('dk-test-tiles');
     box.innerHTML = '';
+    // tile 0 (uncorrected, at the left, no ticks) is shown so the count matches the cut,
+    // but it isn't an offset to pick
+    if (zero && offs.length) {
+      var z = document.createElement('button');
+      z.type = 'button'; z.className = 'dk-btn dk-ghost'; z.disabled = true;
+      z.title = 'Tile 0, at the left with no ticks, is cut as drawn with no correction: it shows what the plugin corrects. It isn’t an offset to pick.';
+      z.innerHTML = 'Tile 0<small>uncorrected</small>';
+      box.appendChild(z);
+    }
     offs.forEach(function(o, k) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'dk-btn dk-ghost';
@@ -1737,7 +1748,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var up = await fetch(BASE_URL + '/api/gcode-files/load-temp', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: name, content: t.text, sourceFile: null }) });
       if (!up.ok) throw new Error('Couldn’t load the test (ncSender answered ' + up.status + ').');
-      cfg.lastTest = t.offsets.join(','); save(); showPick();
+      cfg.lastTest = (t.tiles[0].n === 0 ? '0,' : '') + t.offsets.join(','); save(); showPick();
       program = null;
       note('ok', 'Loaded <span class="dk-file">' + esc(name) + '</span>: ' + esc($('dk-test-plan').textContent) + ' Cut it with X0 Y0 on the scrap’s front left corner and Z0 on its top, then open Drag Knife again and pick the best tile under Offset test.');
       setTimeout(function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); }, 1500);
