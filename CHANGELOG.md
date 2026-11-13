@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2: Clearer preview
 
 - Preview: the holder cylinder is see-through, so the cut lines behind it show.
 - Preview: the close-up from above is sized from the blade offset (5 offsets across), so it's magnified more: 30 mm across for a 6 mm offset, was up to 84 mm.
