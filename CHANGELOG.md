@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Preview: an instant replay in the close-up. After each corner (a swivel or a lead-in) the close-up replays it 3 times in slow motion, centred on it, while the 3D view carries on; click the close-up to skip.
+- Preview: an instant replay in the close-up. After a corner (a swivel or a lead-in) the close-up replays it in smooth slow motion, centred on it, while the knife runs along the straight after it, and goes back to live where the cut bends or ends; click the close-up to skip.
 
 ## 0.1.2: Clearer preview
 

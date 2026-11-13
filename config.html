@@ -1952,7 +1952,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         var piv = a && a.cut && b.cut && a.tip && b.tip && Math.hypot(a.tip.x - b.tip.x, a.tip.y - b.tip.y) < 0.3 * Math.hypot(a.x - b.x, a.y - b.y);
         if (piv && s0 < 0) s0 = q - 1;
         if (!piv && s0 >= 0) {
-          if (dist[q - 1] - dist[s0] >= R * 0.5) list.push({ a: back(s0, R * 2), b: fwd(q - 1, R * 2), what: 'a swivel' });
+          if (dist[q - 1] - dist[s0] >= R * 0.5) list.push({ a: back(s0, R * 2), core: s0, b: fwd(q - 1, R * 2), what: 'a swivel' });
           s0 = -1;
         }
       }
@@ -1963,15 +1963,29 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
           var up = q - 1, airTop = -Infinity;
           while (up > 0 && !samples[up].cut) { airTop = Math.max(airTop, samples[up].z); up--; }
           if (!up || Math.abs(airTop - hopZ) > Math.max(1e-4, hopZ * 0.02)) continue;
-          list.push({ a: back(up, R * 1.5), b: fwd(q, cfg.leadInLength * k + R * 2), what: 'a lead-in' });
+          list.push({ a: back(up, R * 1.5), core: up, b: fwd(q, cfg.leadInLength * k + R * 2), what: 'a lead-in' });
         }
       }
       list.sort(function(x, y) { return x.a - y.a; });
+      // straight: cutting, and the holder's heading turns under 12° from half an offset
+      // before to half an offset after
+      var straight = new Array(n);
+      for (q = 0; q < n; q++) {
+        if (!samples[q].cut) { straight[q] = false; continue; }
+        var pa = samples[back(q, R * 0.5)], pb = samples[fwd(q, R * 0.5)], pq = samples[q];
+        var ax = pq.x - pa.x, ay = pq.y - pa.y, bx = pb.x - pq.x, by = pb.y - pq.y, la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+        straight[q] = !(la > 1e-9 && lb > 1e-9) || (ax * bx + ay * by) / (la * lb) > Math.cos(12 * Math.PI / 180);
+      }
+      // where each straight stretch ends
+      var stEnd = new Array(n), e = n - 1;
+      for (q = n - 1; q >= 0; q--) { if (!straight[q]) e = q - 1; stEnd[q] = e; }
+      list.straight = straight; list.stEnd = stEnd;
       return list;
     })();
-    // A corner replays 3 times in slow motion in the close-up, centred on it, while the
-    // 3D view carries on; corners passed meanwhile aren't replayed. A click skips it.
-    var REPLAYS = 3, replay = null, nextCorner = 0;
+    // A finished corner replays in slow motion in the close-up, centred on it, over and
+    // over while the 3D view carries on along the straight after it, until the knife
+    // reaches the next corner: then the close-up is live again. A click skips it.
+    var replay = null, nextCorner = 0, finished = null;
     function startReplay(c, now) {
       var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, travel = 0;
       for (var q = c.a; q <= c.b; q++) {
@@ -1980,7 +1994,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         if (q > c.a) travel += Math.hypot(m.x - samples[q - 1].x, m.y - samples[q - 1].y);
       }
       var w = Math.max(zoomW, (x1 - x0 + 2 * zR) * 1.15, (y1 - y0 + 2 * zR) * 1.15);
-      replay = { c: c, t0: now, pass: Math.max(1800, Math.min(5000, travel / (zR * 1.2) * 1000)), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: w, drawn: -1 };
+      // only if the straight ahead lasts for most of a pass (a cut-off replay jumps)
+      var passMs = Math.max(900, Math.min(2400, travel / (zR * 3) * 1000));
+      if ((corners.stEnd[i] - i) / samples.length * dur < passMs * 0.7) return;
+      replay = { c: c, t0: now, pass: passMs, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: w, drawn: -1 };
       zsvg.setAttribute('viewBox', [replay.cx - w / 2, -(replay.cy + w / 2), w, w].map(function(v) { return v.toFixed(5); }).join(' '));
       zTrail.setAttribute('opacity', 0.3);
     }
@@ -2000,10 +2017,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     }
     // One replay frame: the tip's path from the corner range's start to now, in its colours.
     function replayFrame(now) {
-      var r = replay, c = r.c, el2 = now - r.t0, cycle = r.pass + 600, pass = Math.floor(el2 / cycle);
-      if (pass >= REPLAYS) { endReplay(); return false; }
-      var f = Math.min(1, (el2 - pass * cycle) / r.pass), idx = c.a + Math.round(f * (c.b - c.a));
-      $('dk-zoom-cap').textContent = 'Instant replay ' + (pass + 1) + ' of ' + REPLAYS + ', slow motion: ' + c.what + ' (click to skip)';
+      var r = replay, c = r.c, el2 = now - r.t0, cycle = r.pass + 250, pass = Math.floor(el2 / cycle);
+      // the program has ended: finish this pass, then stop
+      if (r.last != null && pass > r.last) { endReplay(); return false; }
+      var f = Math.min(1, (el2 - pass * cycle) / r.pass);
+      f = (1 - Math.cos(Math.PI * f)) / 2;   // eased in and out
+      var fi = c.a + f * (c.b - c.a), idx = Math.floor(fi), u = fi - idx, nx = samples[Math.min(c.b, idx + 1)];
+      $('dk-zoom-cap').textContent = 'Instant replay, slow motion: ' + c.what + ' (click to skip)';
       if (idx !== r.drawn) {
         while (zReplay.firstChild) zReplay.removeChild(zReplay.firstChild);
         var line = null, lk = null, hop = false;
@@ -2018,9 +2038,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
           }
           line.setAttribute('points', (line.getAttribute('points') + ' ' + m.tip.x.toFixed(4) + ',' + m.tip.y.toFixed(4)).trim());
         }
-        r.drawn = idx;
+        r.drawn = idx; r.tail = line;
       }
-      zKnife(samples[idx]);
+      // between samples: the knife and the end of the path move smoothly
+      var m0 = samples[idx], mi = { x: m0.x + (nx.x - m0.x) * u, y: m0.y + (nx.y - m0.y) * u, cut: m0.cut,
+        tip: m0.tip && nx.tip ? { x: m0.tip.x + (nx.tip.x - m0.tip.x) * u, y: m0.tip.y + (nx.tip.y - m0.tip.y) * u } : m0.tip };
+      if (r.tail && r.tail.isConnected && mi.tip && m0.cut && nx.cut) {
+        var base = r.tail.getAttribute('data-base');
+        if (base == null) { base = r.tail.getAttribute('points'); r.tail.setAttribute('data-base', base); }
+        r.tail.setAttribute('points', base + ' ' + mi.tip.x.toFixed(4) + ',' + mi.tip.y.toFixed(4));
+      }
+      zKnife(mi);
       return true;
     }
     function frame(now) {
@@ -2050,11 +2078,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var p = samples[Math.min(i, samples.length - 1)];
       draw(p); say(Math.min(i, samples.length - 1));
       followView3d(p.tip ? P(p.tip.x, p.tip.y, p.z) : P(p.x, p.y, p.z + E));
-      // the next corner the knife has finished starts a replay, unless one is running
-      while (nextCorner < corners.length && corners[nextCorner].b < i) {
-        if (!replay) startReplay(corners[nextCorner], now);
-        nextCorner++;
-      }
+      // the knife has reached the next corner: back to live; it has finished one: replay
+      // it, unless it's already in the next one
+      while (nextCorner < corners.length && corners[nextCorner].b < i) finished = corners[nextCorner++];
+      var onStraight = i < samples.length && corners.straight[i];
+      if (replay && i < samples.length && !onStraight) endReplay();
+      if (finished && finished !== (replay && replay.c)) { if (onStraight) { if (replay) endReplay(); startReplay(finished, now); } finished = null; }
+      if (replay && i >= samples.length && replay.last == null) replay.last = Math.floor((now - replay.t0) / (replay.pass + 250));
       if (!(replay && replayFrame(now))) { zoomTo(p); zKnife(p); }
       if (i < samples.length || replay) requestAnimationFrame(frame);
       else { svg.setAttribute('data-done', '1'); setTimeout(function() { if (run === sideRun && ROOT.isConnected) side(); }, 3000); }
