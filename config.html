@@ -140,6 +140,14 @@
   .dk-test-tiles .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-warn-text { color: var(--dk-warn); }
   .dk-warn-text .dk-btn { min-height: 34px; padding: 4px 12px !important; margin-top: 6px; }
+  /* Two pages of cards on the left: the job (each time) and the knife's setup (once per knife). */
+  .dk-pages { display: flex; gap: 6px; flex: none; }
+  .dk-page-tab { -webkit-appearance: none; appearance: none; flex: 1 1 0; min-height: 40px; padding: 6px 14px !important; border-radius: 10px; cursor: pointer;
+    font: inherit; font-weight: 600 !important; background: var(--color-surface-muted) !important; color: var(--color-text-secondary) !important; border: 1px solid var(--color-border) !important; }
+  .dk-page-tab[aria-selected="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
+  .dk-page { display: flex; flex-direction: column; gap: 12px; }
+  .dk-page[hidden] { display: none; }
+  .dk-link { color: var(--dk-accent-text); text-decoration: underline; cursor: pointer; }
   .dk-knife-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
   .dk-knife-row .dk-btn { min-height: 34px; padding: 4px 12px !important; }
   .dk-knife-row .dk-input { flex: 1 1 180px; min-width: 0; }
@@ -159,13 +167,17 @@
         <span>Save to File Manager</span><input type="checkbox" id="dk-saveFiles" role="switch"><span class="dk-switch-track" aria-hidden="true"></span></label>
     </div>
     <p class="dk-note">Rewrites the loaded program for a drag knife: the spindle leads the blade tip by the blade offset,
-      swings or leads into sharp corners, and ramps into each cut. Z0 is the top of the material.</p>
+      swings or leads into sharp corners, and ramps into each cut. <b>Job</b> holds what changes from job to job; <b>Knife setup</b> how your knife moves, and the offset test.</p>
   </header>
   <div class="dk-body">
     <div class="dk-col">
+    <div class="dk-pages" role="tablist" aria-label="Settings pages">
+      <button type="button" class="dk-page-tab" role="tab" data-page="job" aria-selected="true">Job</button>
+      <button type="button" class="dk-page-tab" role="tab" data-page="setup" aria-selected="false">Knife setup</button>
+    </div>
+    <div class="dk-page" id="dk-page-job" role="tabpanel">
 <section class="dk-card">
-    <h3 class="dk-card-title">Knife settings</h3>
-    <div class="dk-sub">Blade</div>
+    <h3 class="dk-card-title">Knife</h3>
     <div class="dk-grid">
       <div class="dk-field" style="grid-column: span 2"><label for="dk-blade">Blade</label>
         <select class="dk-input" id="dk-blade" title="Sets the blade offset, and the lead-in and ramp lengths that suit it. Values are the usual ones for these blades; check yours (your holder's maker may give a different offset).">
@@ -187,11 +199,14 @@
         </div>
         <div class="dk-hint" id="dk-knife-said" aria-live="polite"></div></div>
       <div class="dk-field"><label for="dk-offset">Blade offset (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-offset" type="text" data-unit="length" data-min="0" inputmode="decimal"
-        title="How far the blade tip trails behind the center of the holder. About 0.25 mm for a 45° blade and 0.5 mm for a 60° blade; the right value gives the sharpest corners."></div>
-      <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" inputmode="decimal"
-        title="Turns sharper than this get a swivel: the holder swings around the corner so the tip turns in place. Gentler turns are left to drag."></div>
+        title="How far the blade tip trails behind the center of the holder. About 0.25 mm for a 45° blade and 0.5 mm for a 60° blade; the right value gives the sharpest corners.">
+</div>
     </div>
-    <div class="dk-sub">The material</div>
+    <div class="dk-hint dk-warn-text" id="dk-setup-warn" hidden></div>
+    <div class="dk-hint">Fine-tune how the knife moves, or find its offset with the offset test, under <a href="#" class="dk-link" data-goto="setup">Knife setup</a>.</div>
+  </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">The material</h3>
     <div class="dk-grid">
       <div class="dk-field" style="grid-column: span 2"><label for="dk-zZero">Z0 is</label>
         <select class="dk-input" id="dk-zZero" title="Where the loaded program's Z0 is. Auto reads the program's own note (QuickCut writes “Z0: the top of the stock”); without one, a program that never cuts below Z0 is taken as Z0 on the bed.">
@@ -206,10 +221,42 @@
         title="In the program's units. Moves below this are cuts."></div>
     </div>
     <div class="dk-hint" id="dk-z-say" aria-live="polite"></div>
+  </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">Corners</h3>
+    <label class="dk-check"><input type="checkbox" id="dk-leadIn">
+      <span><b>Lead into sharp corners</b><span class="dk-hint" style="display:block">Hop up at the corner, come down behind it on the next line extended, and cut into the corner already lined up. Off: every sharp corner swivels in place.</span></span></label>
+    <div class="dk-grid" id="dk-protect-fields">
+      <div class="dk-field" style="grid-column: span 2"><label for="dk-protect">Keep lead-ins off</label>
+        <select class="dk-input" id="dk-protect" title="A lead-in cuts a short tapered slit on the next line extended past the corner: outside the shape at outside corners, into it at inside (notch) corners. Choose the side that's your part; corners whose lead-in would cut it swivel instead. Auto treats a shape inside another as a hole (and a shape inside a hole as a part again).">
+          <option value="auto">Auto (parts and holes)</option>
+          <option value="inside">Inside of shapes (parts)</option>
+          <option value="outside">Outside of shapes (holes)</option>
+          <option value="none">Nothing (every corner)</option>
+        </select></div>
+    </div>
+    <div class="dk-auto" id="dk-auto" hidden aria-live="polite"></div>
+    <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
+  </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">Safety</h3>
     <label class="dk-check"><input type="checkbox" id="dk-stripSpindle">
       <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span>
       <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span></label>
-    <div class="dk-sub">Into and out of each cut</div>
+  </section>
+    </div>
+    <div class="dk-page" id="dk-page-setup" role="tabpanel" hidden>
+<section class="dk-card">
+    <h3 class="dk-card-title">Blade</h3>
+    <div class="dk-hint">These settings belong to the knife: set them once, then keep them with <b>Save as a knife…</b> on the Job page.</div>
+    <div class="dk-grid">
+      <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" inputmode="decimal"
+        title="Turns sharper than this get a swivel: the holder swings around the corner so the tip turns in place. Gentler turns are left to drag."></div>
+    </div>
+    <div class="dk-hint">Lengths are in your units preference; type either kind (<code>1/4"</code>, <code>6mm</code>, <code>2mm+1/16"</code>). They're converted for the program's units.</div>
+  </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">Into and out of each cut</h3>
     <div class="dk-grid">
       <div class="dk-field"><label for="dk-rampLength">Ramp in over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-rampLength" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="Each cut starts at the material top and reaches full depth over this distance along the path, so the blade lines up while shallow. Closed shapes recut this stretch at full depth at the end. 0 plunges straight down."></div>
@@ -223,8 +270,10 @@
     <label class="dk-check"><input type="checkbox" id="dk-lineUp">
       <span><b>Line up the blade before the first cut</b><span class="dk-hint" style="display:block">Before the program&rsquo;s first cut, the blade drags a short shallow line (5 offsets) in the waste beside the start, so it&rsquo;s lined up wherever the last job left it and the start mark lands in the waste. Only where there&rsquo;s clear room: outside a part, inside a hole, not past X0 or Y0.</span></span></label>
     <div class="dk-hint dk-warn-text" id="dk-lengths-warn" hidden aria-live="polite"></div>
-    <label class="dk-check dk-sub-check"><input type="checkbox" id="dk-leadIn">
-      <span><b>Lead into sharp corners</b><span class="dk-hint" style="display:block">Hop up at the corner, come down behind it on the next line extended, and cut into the corner already lined up. Off: every sharp corner swivels in place.</span></span></label>
+  </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">Lead-ins at sharp corners</h3>
+    <div class="dk-hint">Used when <b>Lead into sharp corners</b> is on (Job page, Corners).</div>
     <div class="dk-grid" id="dk-leadIn-fields">
       <div class="dk-field"><label for="dk-leadInAngle">Lead in above (°)</label><input class="dk-input" id="dk-leadInAngle" inputmode="decimal"
         title="Turns sharper than this hop up and come back down behind the corner, on the next line extended, then cut into the corner along it, so the blade is already lined up when the cut begins. 0 turns them off too."></div>
@@ -232,17 +281,10 @@
         title="How far behind the corner the lead-in starts. The blade ramps from the material top to full depth over this, so it lines up while shallow. A few times the blade offset."></div>
       <div class="dk-field"><label for="dk-hopHeight">Hop height (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-hopHeight" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="How high above the material top the blade travels from the corner to the lead-in start."></div>
-      <div class="dk-field" style="grid-column: span 2"><label for="dk-protect">Keep lead-ins off</label>
-        <select class="dk-input" id="dk-protect" title="A lead-in cuts a short tapered slit on the next line extended past the corner: outside the shape at outside corners, into it at inside (notch) corners. Choose the side that's your part; corners whose lead-in would cut it swivel instead. Auto treats a shape inside another as a hole (and a shape inside a hole as a part again).">
-          <option value="auto">Auto (parts and holes)</option>
-          <option value="inside">Inside of shapes (parts)</option>
-          <option value="outside">Outside of shapes (holes)</option>
-          <option value="none">Nothing (every corner)</option>
-        </select></div>
     </div>
-    <div class="dk-auto" id="dk-auto" hidden aria-live="polite"></div>
-    <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
-    <div class="dk-sub">Lift at sharp corners (thick material)</div>
+  </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">Lift at sharp corners (thick material)</h3>
     <div class="dk-grid">
       <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" inputmode="decimal"
         title="Turns sharper than this rise partway during the swivel, so the blade turns with less drag, then ramp back to depth. 0 turns it off (best for thin vinyl and paper)."></div>
@@ -251,7 +293,6 @@
       <div class="dk-field"><label for="dk-liftRamp">Back to depth over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftRamp" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="After a lifted swivel, the distance over which the blade goes back to full depth."></div>
     </div>
-    <div class="dk-hint">Lengths are in your units preference; type either kind (<code>1/4"</code>, <code>6mm</code>, <code>2mm+1/16"</code>). They're converted for the program's units.</div>
   </section>
 <section class="dk-card dk-test-card">
     <details id="dk-test">
@@ -282,6 +323,7 @@
       </div>
     </details>
   </section>
+    </div>
     </div>
     <div class="dk-col dk-views">
       <section class="dk-card dk-view">
@@ -1957,6 +1999,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     if (o > 0 && cfg.rampLength < o) short.push('<i>Ramp in over</i> ' + esc(lengthSay(cfg.rampLength)));
     if (o > 0 && cfg.leadIn && cfg.leadInLength < 2 * o) short.push('<i>Lead-in length</i> ' + esc(lengthSay(cfg.leadInLength)));
     box.hidden = !short.length;
+    var jobWarn = $('dk-setup-warn');
+    jobWarn.hidden = !short.length;
+    jobWarn.innerHTML = short.length ? short.join(' and ') + (short.length > 1 ? ' are' : ' is') + ' short for this blade offset: see <a href="#" class="dk-link" data-goto="setup">Knife setup</a>.' : '';
     if (!short.length) { box.innerHTML = ''; return; }
     box.innerHTML = 'For a ' + esc(lengthSay(o)) + ' blade offset, ' + short.join(' and ') + (short.length > 1 ? ' are' : ' is') +
       ' short: the blade needs about 2 to 3 offsets of travel to line up. ' +
@@ -1969,10 +2014,23 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   var leadIn = $('dk-leadIn');
   leadIn.checked = !!cfg.leadIn;
   function leadInShown() {
-    var box = $('dk-leadIn-fields');
-    box.classList.toggle('dk-off', !cfg.leadIn);
-    box.querySelectorAll('input, select').forEach(function(e) { e.disabled = !cfg.leadIn; });
+    ['dk-leadIn-fields', 'dk-protect-fields'].forEach(function(id) {
+      var box = $(id);
+      box.classList.toggle('dk-off', !cfg.leadIn);
+      box.querySelectorAll('input, select').forEach(function(e) { e.disabled = !cfg.leadIn; });
+    });
   }
+  // The two pages: Job (each time) and Knife setup (once per knife, and the offset test).
+  function showPage(name) {
+    ROOT.querySelectorAll('.dk-page-tab').forEach(function(t) { t.setAttribute('aria-selected', t.getAttribute('data-page') === name ? 'true' : 'false'); });
+    $('dk-page-job').hidden = name !== 'job';
+    $('dk-page-setup').hidden = name !== 'setup';
+  }
+  ROOT.querySelectorAll('.dk-page-tab').forEach(function(t) { t.addEventListener('click', function() { showPage(t.getAttribute('data-page')); }); });
+  ROOT.addEventListener('click', function(e) {
+    var a = e.target.closest && e.target.closest('[data-goto]');
+    if (a) { e.preventDefault(); showPage(a.getAttribute('data-goto')); }
+  });
   leadInShown();
   leadIn.addEventListener('change', function() {
     cfg.leadIn = leadIn.checked;
@@ -2117,8 +2175,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     if (p.processed && p.cur && DragKnife.isOffsetTest(p.cur)) {
       btn.textContent = 'Offset test loaded';
       btn.disabled = true;
-      said.textContent = ' (the offset test: cut it, then pick the best tile under Offset test)';
+      said.textContent = ' (the offset test: cut it, then pick the best tile under Knife setup › Offset test)';
       $('dk-test').open = true;
+      showPage('setup');
       return;
     }
     if (p.processed) {

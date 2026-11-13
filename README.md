@@ -76,8 +76,16 @@ the bed.
 
 ## The dialog
 
-![The Drag Knife dialog: knife settings on the left; on the right a 3D preview of a star with a hole being cut, with a
-close-up from above that follows the knife, the legend and what's happening now](docs/images/dialog.png)
+![The Drag Knife dialog: the Job page's cards on the left (Knife, The material, Corners, Safety); on the right a 3D
+preview of a star being cut, with a close-up from above that follows the knife, the legend and what's happening
+now](docs/images/dialog.png)
+
+The settings are on two pages of cards. **Job** holds what you check each time: **Knife** (the **Blade** menu with your
+saved knives, **Blade offset**, **Save as a knife…**), **The material** (**Z0 is** and the depth of cut), **Corners**
+(**Lead into sharp corners**, **Keep lead-ins off**) and **Safety** (**Remove spindle starts**). **Knife setup** holds
+what you set once per knife: **Blade** (**Swivel above**), **Into and out of each cut** (ramp, lift-out, the turn and
+the line-up), **Lead-ins at sharp corners**, **Lift at sharp corners** and the **Offset test**. A warning on the Job
+page points to Knife setup when a length there is too short for the blade offset.
 
 The preview runs your loaded program through the processor with your settings while you change them: in 3D (X/Y to
 scale, Z stretched so hops show), with a close-up from above that follows the knife, and captions from your numbers
