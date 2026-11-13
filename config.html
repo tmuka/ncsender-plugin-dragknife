@@ -217,6 +217,7 @@
       <summary><h3 class="dk-card-title">Offset test: find your blade offset</h3></summary>
       <div class="dk-test-body">
         <p class="dk-hint">Cuts a row of test shapes in scrap, each with a different blade offset around yours and your other settings (its ramp and lead-in scaled with its offset), numbered by short ticks under them. Cut it, peel it, and pick the tile with the sharpest corners. X0 Y0 on the scrap&rsquo;s front left corner, Z0 on its top.</p>
+        <p class="dk-hint"><b>A first guess for large blades:</b> with the spindle&rsquo;s power off, lower the tip onto paper and turn the blade a full turn by hand. Its tip draws a circle around the holder&rsquo;s centre: the offset is half its diameter (12 mm across: 6 mm). See Help.</p>
         <div class="dk-grid">
           <div class="dk-field"><label for="dk-testStep">Step (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testStep" type="text" data-unit="length" data-min="0" inputmode="decimal"
             title="The difference in offset from one tile to the next. Empty or 0: 15 % of your blade offset."></div>
@@ -2406,6 +2407,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     o += '<text x="' + (L - 4).toFixed(1) + '" y="22" font-size="10" text-anchor="end" fill="var(--color-text-secondary)">back at the start</text>';
     return o + '</svg>';
   }
+  // From above: the holder, the blade to its tip, and the circle the tip draws when the
+  // blade is turned by hand. Not to scale with anything; labelled.
+  function spinFigure() {
+    var o = '<svg viewBox="-60 -56 250 112" role="img" aria-label="The blade tip drawing a circle around the holder">';
+    o += '<circle cx="0" cy="0" r="46" fill="none" stroke="' + HELP_C.tip + '" stroke-width="2.5"/>';
+    o += '<circle cx="0" cy="0" r="12" fill="color-mix(in srgb, var(--color-text-primary) 18%, transparent)" stroke="var(--color-text-primary)" stroke-width="1.5"/>';
+    o += '<line x1="0" y1="0" x2="32.5" y2="32.5" stroke="var(--color-text-primary)" stroke-width="3" stroke-linecap="round"/>';
+    o += '<circle cx="32.5" cy="32.5" r="3" fill="' + HELP_C.slit + '"/>';
+    o += '<line x1="-46" y1="0" x2="46" y2="0" stroke="var(--color-text-secondary)" stroke-dasharray="3 3"/>';
+    o += '<text x="-25" y="-5" font-size="9" text-anchor="middle" fill="var(--color-text-secondary)">diameter</text>';
+    o += '<text x="58" y="-22" font-size="10" fill="var(--color-text-secondary)">holder centre</text><line x1="56" y1="-25" x2="10" y2="-6" stroke="var(--color-text-secondary)" stroke-width="0.8"/>';
+    o += '<text x="58" y="12" font-size="10" fill="var(--color-text-secondary)">offset = diameter ÷ 2</text>';
+    o += '<text x="58" y="44" font-size="10" fill="var(--color-text-secondary)">blade tip</text><line x1="56" y1="41" x2="36" y2="34" stroke="var(--color-text-secondary)" stroke-width="0.8"/>';
+    return o + '</svg>';
+  }
   var helpBuilt = false;
   function buildHelp() {
     if (helpBuilt) return;
@@ -2446,6 +2462,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       fig('Right (' + lengthSay(Rt) + ')', helpFigure(tileProg, tileWith(Rt), Rt), 'Square corners and a sharp point.') +
       fig('Offset too big (' + lengthSay(Rt * 1.6) + ')', helpFigure(tileProg, tileWith(Rt * 1.6), Rt), 'The tip overshoots each corner and hooks back: lower it.') +
       '</div>' +
+      '<h4>A first guess for large blades: spin it on paper</h4><p>With a large-format knife (an offset of a few mm) you can measure a starting offset before cutting anything:</p><ol>' +
+      '<li>Tape a piece of paper to the bed. Switch the spindle off at its power, so it can’t start.</li>' +
+      '<li>Lower the knife until the blade tip just touches the paper.</li>' +
+      '<li>Turn the blade by hand through a full turn. The tip swings around the holder’s centre and draws a circle.</li>' +
+      '<li>Measure the circle across its widest point. <b>The blade offset is half the diameter</b> (a 12 mm circle: 6 mm).</li></ol>' +
+      '<p>Type it as the Blade offset, then run the <b>Offset test</b> around it to find the exact value. For small vinyl-cutter blades (0.25 to 0.5 mm) the circle is too small to measure well: start from the Blade presets.</p><div class="dk-figs">' +
+      fig('The tip’s circle', spinFigure(), 'Seen from above: the holder stays put, the tip swings round it at the blade offset. Half the circle’s diameter is the offset.') + '</div>' +
       '<h4>Settings</h4><ul>' +
       '<li><b>Blade / Blade offset:</b> how far the tip trails the holder. Large-format CNC drag knives trail by several mm (6 mm by default); vinyl-cutter style blades about 0.25 mm (30° and 45°) or 0.5 mm (60°). Too small and corners round off; too big and they get a hook.</li>' +
       '<li><b>Swivel above:</b> turns sharper than this get a swivel. Gentler bends just drag.</li>' +

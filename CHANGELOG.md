@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Offset test**: loads a row of test tiles in scrap, each processed with a different blade offset around yours and numbered by ticks; pick the one that cut best to set your blade offset, then **Narrow it down** for a finer row. Help shows what too small, right and too big look like.
+- Help, README and the Offset test card: a first guess for large blades. Turn the blade by hand with its tip on paper; the circle it draws is twice the offset.
 - Preview: an instant replay in the close-up. After a corner (a swivel or a lead-in) the close-up replays it in smooth slow motion, centred on it, for one whole pass, then again while the knife runs straight, and goes back to live where the cut bends or ends; click the close-up to skip.
 
 ## 0.1.2: Clearer preview

@@ -73,6 +73,15 @@ square corners and the sharpest point. That sets your blade offset. Rounded corn
 is too small; little hooks past the corners mean it's too big. **Narrow it down** then sets a step a third as big for
 a finer row around your pick. Step, number of tiles (2 to 9), tile width, cut depth and feed are set in the card.
 
+### A first guess for large blades: spin it on paper
+
+With a large-format knife (an offset of a few mm), you can measure a starting offset before cutting anything. Tape
+a piece of paper to the bed, switch the spindle off at its power (it must not start), and lower the knife until the
+tip just touches the paper. Turn the blade by hand through a full turn: its tip swings around the holder's centre and
+draws a circle. Measure the circle's diameter across its widest point; **the blade offset is half the diameter**
+(a 12 mm circle: 6 mm). Use it as the centre of the **Offset test**, which then finds the exact value. For small
+vinyl-cutter blades (0.25 to 0.5 mm) the circle is too small to measure well; start from the Blade presets instead.
+
 ## Use
 
 1. Load the program for the cut. Z0 should be the top of the material, and the cut is the shape you want.
