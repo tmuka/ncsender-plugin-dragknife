@@ -21,6 +21,9 @@ slit in the waste](docs/images/corners.svg)
   down to a shallow turning depth (*Turn at*, 25 % of the depth), swings round so the tip turns in place, then ramps in
   already lined up: no scratch off the line at the start. The program's first cut can't know which way the blade
   points, so it only ramps in.
+
+  ![Before: the second cut starts with the blade still pointing the way the first cut went, and the tip drags off the
+  line. Now: the tip lands on the start, turns in place, then ramps in on the line](docs/images/start-turn.svg)
 - **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving along
   the shape (*Lift out over*, never past the rest of the lap).
 - **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default; each line is left commented out and marked
@@ -78,7 +81,15 @@ offsets whatever yours is; the blade turns in place before each cut. Tiles are n
 with no correction. Cut it, peel it, and open Drag Knife again: under **Which tile cut best?** pick the tile with the
 square corners and the sharpest point. That sets your blade offset. Rounded corners and a blunt point mean the offset
 is too small; little hooks past the corners mean it's too big. **Narrow it down** then sets a step a third as big for
-a finer row around your pick. Step, number of tiles (2 to 9), tile width, cut depth and feed are set in the card.
+a finer row around your pick. **Step**, **Tiles** (2 to 9), **Tile width**, **Cut depth** and **Feed** are set in the
+card.
+
+![The offset test drawn by the simulator: with a blade that really trails 6 mm, tile 3 (6 mm) comes out sharp while
+the smaller offsets round the corners and the larger ones loop at the point; with 5.4 mm, tile 2 is the sharp
+one](docs/images/offset-test.svg)
+
+*Drawn by the plugin's own processor and drag model: green is on the line, orange off it. Draw them again with
+`node .scripts/diagrams.cjs`.*
 
 ### A first guess for large blades: spin it on paper
 

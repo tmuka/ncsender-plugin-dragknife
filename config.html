@@ -2464,8 +2464,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     function kind(p) { if (onWant(p)) return 'tip'; var n = 0; shapes.forEach(function(poly) { if (inPoly(p, poly)) n++; }); return n % 2 ? 'bad' : 'slit'; }
     var seg = [], air = null;
     function flushAxis() { if (seg.length > 1) o += '<polyline points="' + seg.join(' ') + '" fill="none" stroke="' + HELP_C.axis + '" stroke-width="1.2"' + (air ? ' stroke-dasharray="2 3"' : '') + NSS + '/>'; }
-    sm.forEach(function(p) { var a = !p.cut; if (a !== air) { flushAxis(); seg = seg.length ? [seg[seg.length - 1]] : []; air = a; } seg.push(p.x.toFixed(2) + ',' + p.y.toFixed(2)); });
-    flushAxis();
+    if (!opts.noAxis) {
+      sm.forEach(function(p) { var a = !p.cut; if (a !== air) { flushAxis(); seg = seg.length ? [seg[seg.length - 1]] : []; air = a; } seg.push(p.x.toFixed(2) + ',' + p.y.toFixed(2)); });
+      flushAxis();
+    }
     var tseg = [], tk = null;
     function flushTip() { if (tseg.length > 1) o += '<polyline points="' + tseg.join(' ') + '" fill="none" stroke="' + HELP_C[tk] + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"' + NSS + '/>'; }
     sm.forEach(function(p) {
@@ -2529,6 +2531,26 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var Rt = 2, tp = DragKnife.testTile(0, 0, 12), tileProg = ['G21 G90 G17', 'G0 Z5', 'G0 X' + tp[0][0] + ' Y' + tp[0][1], 'G1 Z-0.5 F300']
       .concat(tp.slice(1).map(function(p) { return 'G1 X' + p[0].toFixed(3) + ' Y' + p[1].toFixed(3) + ' F1000'; }), ['G0 Z5', 'M30']).join('\n') + '\n';
     function tileWith(o) { return DragKnife.process(tileProg, { offset: o, leadIn: false, rampLength: 4, liftOut: 1 }).text; }
+    // Turning in place at a cut's start: two cuts, the blade trailing 6 mm.
+    var twoCuts = ['G21 G90 G17', 'G0 Z5', 'G0 X0 Y0', 'G1 Z-0.5 F200', 'G1 X40 Y0 F1000', 'G0 Z5', 'G0 X60 Y20', 'G1 Z-0.5 F200',
+      'G1 X60 Y60 F1000', 'G1 X100 Y60', 'G1 X100 Y20', 'G1 X60 Y20', 'G0 Z5', 'M30'].join('\n') + '\n';
+    function twoWith(on) { return DragKnife.process(twoCuts, { offset: 6, leadIn: false, rampLength: 12, liftOut: 0.5, startTurn: on }).text; }
+    // The offset test as the plugin loads it, cut by a blade that really trails 6 mm.
+    var row = DragKnife.offsetTest({ offsets: DragKnife.testOffsets(6, 0.6, 5), depth: 0.5, uncorrected: true }, { offset: 6, rampLength: 12, liftOut: 0.5 });
+    var rowWant = ['G21 G90 G17', 'G0 Z5'];
+    row.tiles.forEach(function(tl) {
+      var p = DragKnife.testTile(tl.x, tl.y, row.size);
+      rowWant.push('G0 X' + p[0][0].toFixed(3) + ' Y' + p[0][1].toFixed(3), 'G1 Z-0.5 F200');
+      p.slice(1).forEach(function(q) { rowWant.push('G1 X' + q[0].toFixed(3) + ' Y' + q[1].toFixed(3) + ' F1000'); });
+      rowWant.push('G0 Z5');
+      // its ticks, as the test lays them out
+      var tickL = row.size * 0.25, ty = tl.y - tickL - Math.max(row.size * 0.2, Math.max.apply(null, row.offsets) + 1);
+      for (var i = 0; i < tl.n; i++) {
+        var tx = tl.x + row.size * 0.2 + (tl.n === 1 ? row.size * 0.3 : row.size * 0.6 * i / (tl.n - 1));
+        rowWant.push('G0 X' + tx.toFixed(3) + ' Y' + ty.toFixed(3), 'G1 Z-0.5 F200', 'G1 X' + tx.toFixed(3) + ' Y' + (ty + tickL).toFixed(3) + ' F1000', 'G0 Z5');
+      }
+    });
+    rowWant = rowWant.concat(['M30']).join('\n') + '\n';
     function fig(title, svg, cap, wide) { return '<figure class="dk-fig' + (wide ? ' dk-fig-wide' : '') + '"><b>' + title + '</b>' + svg + '<figcaption>' + cap + '</figcaption></figure>'; }
     var key = '<div class="dk-help-key"><span><span class="dk-key" style="border-top-style: dashed; color: var(--color-text-secondary)"></span>the cut you want</span>' +
       '<span><span class="dk-key" style="color: ' + HELP_C.axis + '; border-top-width: 1px"></span>holder (spindle) path, dotted in the air</span>' +
@@ -2552,6 +2574,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       fig('Offset too small (' + lengthSay(Rt * 0.6) + ')', helpFigure(tileProg, tileWith(Rt * 0.6), Rt), 'The corners round off inside and the point is blunt: raise it.') +
       fig('Right (' + lengthSay(Rt) + ')', helpFigure(tileProg, tileWith(Rt), Rt), 'Square corners and a sharp point.') +
       fig('Offset too big (' + lengthSay(Rt * 1.6) + ')', helpFigure(tileProg, tileWith(Rt * 1.6), Rt), 'The tip overshoots each corner and hooks back: lower it.') +
+      fig('A whole test, the blade really trailing ' + lengthSay(6), helpFigure(rowWant, row.text, 6, { pad: 4, noAxis: true }), 'Tiles 0 to 5 left to right: 0 uncorrected, then ' + row.offsets.map(function(o) { return lengthSay(o); }).join(', ') + '. Tile 3 (' + lengthSay(6) + ') comes out sharp; smaller offsets round the corners and point, larger ones loop. The ticks under each tile are its number.', true) +
+      '</div>' +
+      '<h4>Turning in place before each cut</h4><p>The blade keeps pointing the way it last cut, even in the air. Without the turn, the next cut starts with it pointing the old way, so the tip drags off the line (amber) until the ramp lines it up. With <b>Turn the blade in place before each cut</b> on, the tip lands exactly on the start, turns there at <b>Turn at</b> (a quarter of the depth), then ramps in on the line. The first cut of a program can’t know which way the blade points.</p><div class="dk-figs">' +
+      fig('Turn off', helpFigure(twoCuts, twoWith(false), 6), 'The second cut (the square) starts with the blade still pointing right, the way the first cut went.') +
+      fig('Turn on', helpFigure(twoCuts, twoWith(true), 6), 'The holder swings round the start (the small arc), so the tip turns in place, then the cut ramps in lined up.') +
       '</div>' +
       '<h4>A first guess for large blades: spin it on paper</h4><p>With a large-format knife (an offset of a few mm) you can measure a starting offset before cutting anything:</p><ol>' +
       '<li>Tape a piece of paper to the bed. Switch the spindle off at its power, so it can’t start.</li>' +
