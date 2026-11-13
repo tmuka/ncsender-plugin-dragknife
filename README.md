@@ -87,6 +87,11 @@ what you set once per knife: **Blade** (**Swivel above**), **Into and out of eac
 the line-up), **Lead-ins at sharp corners**, **Lift at sharp corners** and the **Offset test**. A warning on the Job
 page points to Knife setup when a length there is too short for the blade offset.
 
+![The Knife setup page: the Blade card (Swivel above), Into and out of each cut (Ramp in over, Lift out over, Turn at,
+the turn and line-up switches) and Lead-ins at sharp corners, beside the same preview](docs/images/dialog-setup.png)
+
+On a smaller screen the dialog scrolls as one page; the preview stays in view between the header and the footer.
+
 The preview runs your loaded program through the processor with your settings while you change them: in 3D (X/Y to
 scale, Z stretched so hops show), with a close-up from above that follows the knife, and captions from your numbers
 (cut 2 of 3, ramp, depth, lead-in, hop). Scroll or pinch to zoom where you point, drag to move, double-click to see

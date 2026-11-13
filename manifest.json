@@ -1,7 +1,7 @@
 {
   "id": "com.tmuka.drag-knife",
   "name": "Drag Knife",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "minAppVersion": "2.0.88",
   "configUi": "config.html",
   "icon": "icon.png",
