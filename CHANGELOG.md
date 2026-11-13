@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Moves the plugin adds before a cut (lifting off Z0 where QuickCut touches down, going to and from the line-up) now travel as high as the program's own travels, not **Hop height**. A spring-loaded holder zeroed pressed down still touched at 1 mm up and cut a loop above the star's top point on the way to the line-up and back. **Hop height**'s tip says it must clear the material.
+
 ## 0.1.4: Your knives, Z0 and a new layout
 
 - **One scrollbar:** on smaller screens (laptops at 1366×768 or 1280×720) the dialog scrolls as one page; cards grow to their content instead of scrolling inside. The preview card is exactly the visible height between the dialog's header and footer (a smaller close-up and legend on short windows), stays in view while the settings scroll past, and the footer with **Process** stays at the bottom. README: new screenshots of both pages.

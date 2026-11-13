@@ -648,7 +648,9 @@ test('shapes that start at Z0 (QuickCut) still turn in place: the knife lifts fi
   const res = DK.process(two, { offset: 4, leadIn: false, lineUp: false });
   assert.strictEqual(res.stats.turns, 1);
   const lines = res.text.split('\n'), c2 = lines.findIndex(l => l.startsWith('(dk: cut 2'));
-  assert.match(lines[c2 + 1], /^G0 Z1$/, 'lifts off the top first: ' + lines.slice(c2, c2 + 4).join(' / '));
+  // up to the program's own travel height (Z2 here), over, then down to Hop height
+  assert.match(lines[c2 + 1], /^G0 Z2$/, 'lifts off the top first: ' + lines.slice(c2, c2 + 4).join(' / '));
+  assert.match(lines[c2 + 3], /^G0 Z1$/, 'back down to Hop height: ' + lines.slice(c2, c2 + 5).join(' / '));
 });
 
 // ---------- where Z0 is ----------
@@ -679,4 +681,23 @@ test('Z0: read from the program comment, else from its heights; depth of cut wor
   assert.strictEqual(DK.readZ(bed, { zZero: 'top' }).mode, 'top');
   assert.strictEqual(DK.readSettings({ surfaceZ: -5 }).zZero, 'other');
   assert.strictEqual(DK.readZ(bed, { surfaceZ: 4 }).surfaceZ, 4);
+});
+
+test('travels added before a cut clear a blade that still touches 1 mm up (spring-loaded, zeroed pressed)', () => {
+  // QuickCut-style: travel at Z5, down to Z0 at the start, then cut; a 20 mm square well inside
+  const sq = prog(['G0 X30 Y30', 'G0 Z5', 'G0 Z2', 'G1 Z0 F60', 'G1 Z-1', 'G1 X50 Y30 F1000', 'G1 X50 Y50', 'G1 X30 Y50', 'G1 X30 Y30', 'G0 Z5']);
+  const res = DK.process(sq, { offset: 4, leadIn: false, rampLength: 8 });
+  assert.strictEqual(res.stats.lineUps, 1);
+  const { distToPath } = require('./sim.cjs');
+  const want = run(sq, 0.05).filter(s => s.z < 0);
+  const stray = (surface) => {
+    let L = 0, p = null;
+    for (const t of drag(run(res.text, 0.02), 4, surface, { x: 1, y: 0 })) {
+      if (p && distToPath(t, want) > 0.5 && Math.hypot(t.x - p.x, t.y - p.y) < 0.5) L += Math.hypot(t.x - p.x, t.y - p.y);
+      p = t;
+    }
+    return L;
+  };
+  // only the line-up itself is off the square, whether the blade clears at Z0 or touches up to Z1.2
+  assert.ok(stray(1.2) < stray(0) + 0.5, 'touching up to Z1.2 adds ' + (stray(1.2) - stray(0)).toFixed(1) + ' mm of stray cut');
 });
