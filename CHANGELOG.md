@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3: Offset test and turning in place
 
 - **Turn in place before each cut:** the blade keeps pointing the way it last cut; before the next cut, and where it comes down for a lead-in, the tip lands on the start, turns there at a shallow depth (*Turn at*, 25 % of the depth), then ramps in already lined up. No more scratch off the line at each start (up to the offset before). The program's first cut still only ramps in.
 - **Lift-out follows the shape** over ground already cut, instead of running straight on (a long lift-out ran off the shape past the corner).
