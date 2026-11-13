@@ -38,6 +38,10 @@ slit in the waste](docs/images/corners.svg)
 - **Blade:** 6 mm offset by default (large-format CNC drag knives trail by several mm), or pick a vinyl-cutter style
   blade, 30°/45° (0.25 mm) or 60° (0.5 mm), or type your holder's offset. Lengths take any unit
   (`1/4"`, `6mm`).
+- **Your knives:** once a knife is set up (after the offset test, say), **Save as a knife…** under **Blade** keeps its
+  **Blade offset** and how it moves (**Ramp in over**, **Lift out over**, the turn, the lead-in and lift settings)
+  under a name. Pick it from the **Blade** menu, under *Your knives*, to switch between knives; **Delete this knife**
+  removes it. Changing any of its values shows *Custom* until you save it again under the same name.
 - **Animation:** the dialog runs the loaded program (or a sample part when none is loaded) through the processor with
   the current settings and animates the knife, to scale, with a close-up that follows the knife. Slits in the waste and slits
   into the part are coloured. Corners already rounded in the program (a CAM tool radius on an outside cut) have

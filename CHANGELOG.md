@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Your knives:** **Save as a knife…** under **Blade** keeps a knife's **Blade offset** and how it moves under a name, to pick from the **Blade** menu (for more than one knife, or after the offset test); **Delete this knife** removes one. Picking a tile in the offset test suggests saving it.
+
 ## 0.1.3: Offset test and turning in place
 
 - **Turn in place before each cut:** the blade keeps pointing the way it last cut; before the next cut, and where it comes down for a lead-in, the tip lands on the start, turns there at a shallow depth (*Turn at*, 25 % of the depth), then ramps in already lined up. No more scratch off the line at each start (up to the offset before). The program's first cut still only ramps in.

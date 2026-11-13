@@ -581,3 +581,20 @@ test('offset test: every corner swivels, and the blade turns in place from tile 
   assert.match(t.text, /corners swivel/);
   assert.ok((t.text.match(/^G[23] /gm) || []).length > 9, 'swivels and turns');
 });
+
+test('saved knives: named, cleaned, only the knife settings', () => {
+  const s = DK.readSettings({ knives: [
+    { name: '  6 mm  tangential ', s: { offset: 4.65, leadInLength: 18, surfaceZ: 3, protect: 'none', bogus: 1 } },
+    { name: '6 MM TANGENTIAL', s: { offset: 1 } },        // the same name again: dropped
+    { name: '', s: { offset: 1 } },                       // no name: dropped
+    { name: 'Vinyl', s: { offset: -2, turnDepth: 7 } },    // read like any settings
+    'nonsense'] });
+  assert.deepStrictEqual(s.knives.map(k => k.name), ['6 mm tangential', 'Vinyl']);
+  assert.deepStrictEqual(Object.keys(s.knives[0].s).sort(), DK.KNIFE_KEYS.slice().sort());
+  assert.strictEqual(s.knives[0].s.offset, 4.65);
+  assert.strictEqual(s.knives[0].s.rampLength, DK.DEFAULTS.rampLength, 'missing values get the defaults');
+  assert.strictEqual(s.knives[1].s.offset, 0);
+  assert.strictEqual(s.knives[1].s.turnDepth, 1);
+  assert.deepStrictEqual(DK.readSettings({}).knives, []);
+  assert.strictEqual(DK.readSettings({ knives: Array.from({ length: 30 }, (_, i) => ({ name: 'k' + i, s: {} })) }).knives.length, 20);
+});

@@ -140,6 +140,10 @@
   .dk-test-tiles .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
   .dk-warn-text { color: var(--dk-warn); }
   .dk-warn-text .dk-btn { min-height: 34px; padding: 4px 12px !important; margin-top: 6px; }
+  .dk-knife-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+  .dk-knife-row .dk-btn { min-height: 34px; padding: 4px 12px !important; }
+  .dk-knife-row .dk-input { flex: 1 1 180px; min-width: 0; }
+  #dk-knife-said .dk-btn { min-height: 30px; padding: 2px 10px !important; margin-top: 4px; }
   .dk-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; cursor: pointer; }
   .dk-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--color-accent); }
 </style>
@@ -163,10 +167,23 @@
     <div class="dk-grid">
       <div class="dk-field" style="grid-column: span 2"><label for="dk-blade">Blade</label>
         <select class="dk-input" id="dk-blade" title="Sets the blade offset, and the lead-in and ramp lengths that suit it. Values are the usual ones for these blades; check yours (your holder's maker may give a different offset).">
+          <optgroup label="Common blades">
           <option value="45">30° or 45° blade: vinyl, paper (0.25 mm)</option>
           <option value="60">60° blade: thick card, leather (0.5 mm)</option>
+          </optgroup>
+          <optgroup label="Your knives" id="dk-knives-group" hidden></optgroup>
           <option value="custom">Custom</option>
-        </select></div>
+        </select>
+        <div class="dk-knife-row">
+          <button type="button" class="dk-btn dk-ghost" id="dk-knife-save" title="Save the blade offset and the settings for how it moves (ramp, lift-out, turn, lead-ins, lifts) under a name, to pick from this menu later: for more than one knife, or after the offset test.">Save as a knife…</button>
+          <button type="button" class="dk-btn dk-ghost" id="dk-knife-del" hidden>Delete this knife</button>
+        </div>
+        <div class="dk-knife-row" id="dk-knife-name-row" hidden>
+          <input class="dk-input" id="dk-knife-name" type="text" maxlength="40" placeholder="A name, e.g. 6 mm tangential" aria-label="Knife name">
+          <button type="button" class="dk-btn" id="dk-knife-ok">Save</button>
+          <button type="button" class="dk-btn dk-ghost" id="dk-knife-cancel">Cancel</button>
+        </div>
+        <div class="dk-hint" id="dk-knife-said" aria-live="polite"></div></div>
       <div class="dk-field"><label for="dk-offset">Blade offset (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-offset" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="How far the blade tip trails behind the center of the holder. About 0.25 mm for a 45° blade and 0.5 mm for a 60° blade; the right value gives the sharpest corners."></div>
       <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" inputmode="decimal"
@@ -637,9 +654,29 @@ var DragKnife = (function () {
     // the offset test (the dialog): step 0 = 15 % of the offset, size 0 = from the offsets
     testStep: 0, testCount: 5, testSize: 0, testDepth: 0.3, testFeed: 1000, testUncorrected: true,
     lastTest: '',        // the offsets of the last test loaded, "4.2,5.1,6", for picking the best tile
+    knives: [],          // saved knives: [{ name, s: { the KNIFE_KEYS settings } }], picked from the Blade menu
     protect: 'auto'      // which side of a closed shape lead-in cuts must not touch: 'auto' (parts' inside, holes' outside), 'inside', 'outside', 'none'
   };
   var PROTECT = ['auto', 'inside', 'outside', 'none'];
+  // What a saved knife holds: the blade and how it moves. Not the material top, the
+  // spindle switch, the side to protect or the offset test's fields.
+  var KNIFE_KEYS = ['offset', 'swivelAngle', 'rampLength', 'liftOut', 'startTurn', 'turnDepth', 'leadIn', 'leadInAngle',
+    'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp'];
+  // Saved knives, cleaned: at most 20, each with a name (1 to 40 plain characters,
+  // unique) and its settings read like any others.
+  function readKnives(list) {
+    var out = [], seen = {};
+    (Array.isArray(list) ? list : []).forEach(function (kn) {
+      if (out.length >= 20 || !kn || typeof kn !== 'object') return;
+      var name = String(kn.name || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+      if (!name || seen[name.toLowerCase()]) return;
+      seen[name.toLowerCase()] = true;
+      var all = readSettings(kn.s && typeof kn.s === 'object' ? kn.s : {}), s = {};
+      KNIFE_KEYS.forEach(function (k) { s[k] = all[k]; });
+      out.push({ name: name, s: s });
+    });
+    return out;
+  }
 
   // ---------- vectors ----------
   function v(x, y) { return { x: x, y: y }; }
@@ -746,6 +783,7 @@ var DragKnife = (function () {
     var s = {};
     for (var k in DEFAULTS) {
       if (typeof DEFAULTS[k] === 'boolean') { s[k] = raw && typeof raw[k] === 'boolean' ? raw[k] : DEFAULTS[k]; continue; }
+      if (k === 'knives') { s[k] = readKnives(raw && raw[k]); continue; }
       if (k === 'lastTest') { s[k] = raw && typeof raw[k] === 'string' && /^[\d.,]*$/.test(raw[k]) ? raw[k] : ''; continue; }
       if (k === 'protect') { s[k] = raw && PROTECT.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       var n = raw && raw[k] !== undefined && raw[k] !== '' ? Number(raw[k]) : DEFAULTS[k];
@@ -1540,6 +1578,7 @@ var DragKnife = (function () {
   }
 
   return {
+    KNIFE_KEYS: KNIFE_KEYS, readKnives: readKnives,
     offsetTest: offsetTest, testOffsets: testOffsets, testTile: testTile, isOffsetTest: isOffsetTest, testSize: testSize,
     sourceLabel: function (name) { return commentText(String(name).replace(/[()]/g, ''), 50); }, processedFrom: processedFrom,
     DEFAULTS: DEFAULTS, process: process, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
@@ -1571,7 +1610,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function showUnits() {
     ROOT.querySelectorAll('.dk-unit').forEach(function(u) { u.textContent = imperial ? 'in' : 'mm'; });
     Object.keys(LENGTHS).forEach(showField);
-    if (typeof testPlan === 'function' && $('dk-test-plan')) { testPlan(); showPick(); lengthsCheck(); }
+    if (typeof testPlan === 'function' && $('dk-test-plan')) { testPlan(); showPick(); lengthsCheck(); knivesShown(); bladeShown(); }
   }
   FIELDS.forEach(function(k) {
     var el = $('dk-' + k);
@@ -1608,18 +1647,91 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   // Blade presets: the usual offsets, with a lead-in about 6 and a ramp about 8 offsets long.
   var BLADES = { '45': { offset: 0.25, leadInLength: 1.5, rampLength: 2 }, '60': { offset: 0.5, leadInLength: 3, rampLength: 4 } };
   var blade = $('dk-blade');
+  // Your knives: saved under a name with Save as a knife, picked from the Blade menu.
+  function same(a, b) { return typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-6 : a === b; }
+  function knivesShown() {
+    var g = $('dk-knives-group');
+    g.innerHTML = '';
+    (cfg.knives || []).forEach(function(kn, i) {
+      var o = document.createElement('option');
+      o.value = 'k' + i; o.textContent = kn.name + ' (' + lengthSay(kn.s.offset) + ')';
+      g.appendChild(o);
+    });
+    g.hidden = !(cfg.knives || []).length;
+  }
   function bladeShown() {
     var match = 'custom';
     Object.keys(BLADES).forEach(function(b) { var p = BLADES[b]; if (Object.keys(p).every(function(k) { return Math.abs(cfg[k] - p[k]) < 1e-6; })) match = b; });
+    // a saved knife matches only when every one of its settings does
+    (cfg.knives || []).forEach(function(kn, i) { if (match.charAt(0) !== 'k' && DragKnife.KNIFE_KEYS.every(function(k) { return same(cfg[k], kn.s[k]); })) match = 'k' + i; });
     blade.value = match;
+    $('dk-knife-del').hidden = match.charAt(0) !== 'k';
   }
+  knivesShown();
   bladeShown();
-  ROOT.addEventListener('focusout', function(e) { if (e.target.matches && e.target.matches('#dk-offset, #dk-leadInLength, #dk-rampLength')) setTimeout(bladeShown, 0); });
+  ROOT.addEventListener('focusout', function(e) { if (e.target.matches && e.target.matches('.dk-input')) setTimeout(bladeShown, 0); });
+  // every setting a knife holds, shown again after one is picked
+  function knifeFieldsShown() {
+    DragKnife.KNIFE_KEYS.forEach(function(k) { if (FIELDS.indexOf(k) >= 0) showField(k); });
+    leadIn.checked = !!cfg.leadIn; leadInShown();
+    startTurn.checked = !!cfg.startTurn; startTurnShown();
+  }
   blade.addEventListener('change', function() {
-    var p = BLADES[blade.value];
+    $('dk-knife-said').textContent = '';
+    var v = blade.value;
+    if (v.charAt(0) === 'k') {
+      var kn = cfg.knives[+v.slice(1)];
+      if (!kn) return;
+      DragKnife.KNIFE_KEYS.forEach(function(k) { cfg[k] = kn.s[k]; });
+      knifeFieldsShown(); bladeShown(); save(); refresh();
+      $('dk-knife-said').textContent = 'Using ' + kn.name + ': blade offset ' + lengthSay(kn.s.offset) + '.';
+      return;
+    }
+    var p = BLADES[v];
+    $('dk-knife-del').hidden = true;
     if (!p) return;
     Object.keys(p).forEach(function(k) { cfg[k] = p[k]; showField(k); });
     save(); refresh();
+  });
+  function knifeAsking(on) {
+    $('dk-knife-name-row').hidden = !on;
+    $('dk-knife-save').hidden = on;
+    if (on) {
+      var cur = blade.value.charAt(0) === 'k' ? cfg.knives[+blade.value.slice(1)] : null;
+      $('dk-knife-name').value = cur ? cur.name : '';
+      $('dk-knife-name').focus();
+    }
+  }
+  $('dk-knife-save').addEventListener('click', function() { $('dk-knife-said').textContent = ''; knifeAsking(true); });
+  $('dk-knife-cancel').addEventListener('click', function() { knifeAsking(false); });
+  function knifeSave() {
+    var name = $('dk-knife-name').value.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!name) { $('dk-knife-said').textContent = 'Type a name for this knife first.'; $('dk-knife-name').focus(); return; }
+    var kn = { name: name, s: {} };
+    DragKnife.KNIFE_KEYS.forEach(function(k) { kn.s[k] = cfg[k]; });
+    var list = (cfg.knives || []).slice(), at = -1;
+    list.forEach(function(x, i) { if (x.name.toLowerCase() === name.toLowerCase()) at = i; });
+    if (at < 0 && list.length >= 20) { $('dk-knife-said').textContent = 'That’s 20 knives already: delete one first.'; return; }
+    if (at >= 0) list[at] = kn; else list.push(kn);
+    cfg.knives = DragKnife.readKnives(list);
+    save(); knivesShown(); bladeShown(); knifeAsking(false);
+    $('dk-knife-said').textContent = (at >= 0 ? 'Updated ' : 'Saved ') + name + ' (blade offset ' + lengthSay(cfg.offset) + '). Pick it from the Blade menu.';
+  }
+  $('dk-knife-ok').addEventListener('click', knifeSave);
+  $('dk-knife-name').addEventListener('keydown', function(e) { if (e.key === 'Enter') knifeSave(); if (e.key === 'Escape') { e.stopPropagation(); knifeAsking(false); } });
+  $('dk-knife-del').addEventListener('click', function() {
+    var i = +blade.value.slice(1), kn = cfg.knives[i];
+    if (!kn) return;
+    // asked inline (a browser confirm box may not show inside ncSender)
+    var said = $('dk-knife-said');
+    said.innerHTML = 'Delete the knife <b>' + esc(kn.name) + '</b>? Your current settings stay as they are. ' +
+      '<button type="button" class="dk-btn dk-ghost" id="dk-knife-del-yes">Delete it</button> <button type="button" class="dk-btn dk-ghost" id="dk-knife-del-no">Keep it</button>';
+    $('dk-knife-del-no').addEventListener('click', function() { said.textContent = ''; });
+    $('dk-knife-del-yes').addEventListener('click', function() {
+      cfg.knives = cfg.knives.filter(function(x, j) { return j !== i; });
+      save(); knivesShown(); bladeShown();
+      said.textContent = 'Deleted ' + kn.name + '.';
+    });
   });
   var protect = $('dk-protect');
   protect.value = cfg.protect;
@@ -1724,7 +1836,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       said.innerHTML = 'Blade offset set to <b>' + esc(lengthSay(o)) + '</b> (tile ' + (k + 1) + '). The tiles were ' + esc(lengthSay(step)) + ' apart: as fine as the test goes.';
       return;
     }
-    said.innerHTML = 'Blade offset set to <b>' + esc(lengthSay(o)) + '</b> (tile ' + (k + 1) + '). ' +
+    said.innerHTML = 'Blade offset set to <b>' + esc(lengthSay(o)) + '</b> (tile ' + (k + 1) + '). Once you’re happy with it, keep it with <b>Save as a knife…</b> under Blade. ' +
       (end ? 'That’s the end of the row, so the best may be beyond it: load the test again, centred on it now. '
         : 'For a closer look, cut a finer test around it: ') +
       '<button type="button" class="dk-btn dk-ghost" id="dk-test-narrow">' + (end ? 'Same step, centred here' : 'Narrow it down (step ' + esc(lengthSay(finer)) + ')') + '</button>';
@@ -1826,7 +1938,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function refresh() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(function() { checkAuto(); side(); }, 250);
-    testPlan(); showPick(); lengthsCheck();
+    testPlan(); showPick(); lengthsCheck(); bladeShown();
   }
   var autoRun = 0;
   async function checkAuto() {
@@ -2600,6 +2712,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       fig('The tip’s circle', spinFigure(), 'Seen from above: the holder stays put, the tip swings round it at the blade offset. Half the circle’s diameter is the offset.') + '</div>' +
       '<h4>Settings</h4><ul>' +
       '<li><b>Blade / Blade offset:</b> how far the tip trails the holder. Large-format CNC drag knives trail by several mm (6 mm by default); vinyl-cutter style blades about 0.25 mm (30° and 45°) or 0.5 mm (60°). Too small and corners round off; too big and they get a hook.</li>' +
+      '<li><b>Your knives:</b> <b>Save as a knife…</b> under Blade keeps the blade offset and how the knife moves (ramp, lift-out, the turn, lead-ins, lifts) under a name; pick it from the Blade menu to switch knives. Material top Z, the spindle switch and Keep lead-ins off aren’t part of a knife.</li>' +
       '<li><b>Swivel above:</b> turns sharper than this get a swivel. Gentler bends just drag.</li>' +
       '<li><b>Material top Z:</b> moves below this are cuts. 0 when Z0 is the top of the material.</li>' +
       '<li><b>Remove spindle starts:</b> M3, M4 and S come out (commented, so you can see them). A drag knife must never spin.</li>' +
