@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Turn in place before each cut:** the blade keeps pointing the way it last cut; before the next cut, and where it comes down for a lead-in, the tip lands on the start, turns there at a shallow depth (*Turn at*, 25 % of the depth), then ramps in already lined up. No more scratch off the line at each start (up to the offset before). The program's first cut still only ramps in.
+- **Lift-out follows the shape** over ground already cut, instead of running straight on (a long lift-out ran off the shape past the corner).
+- **A warning** when the ramp (under 1 offset) or lead-in (under 2 offsets) is too short for the blade offset, with a button to set 2 and 3 offsets (picking Custom and typing a large offset kept the vinyl blade's 2 mm and 1.5 mm).
+- Offset test: every corner swivels (no lead-ins), where a wrong offset shows plainly, and each tile gets a ramp of 2 offsets and a lift-out of at most 1, whatever yours are; it needs far less scrap.
 - **Offset test**: loads a row of test tiles in scrap, each processed with a different blade offset around yours and numbered by ticks; pick the one that cut best to set your blade offset, then **Narrow it down** for a finer row. Help shows what too small, right and too big look like.
 - Help, README and the Offset test card: a first guess for large blades. Turn the blade by hand with its tip on paper; the circle it draws is twice the offset.
 - Preview: an instant replay in the close-up. After a corner (a swivel or a lead-in) the close-up replays it in smooth slow motion, centred on it, for one whole pass, then again while the knife runs straight, and goes back to live where the cut bends or ends; click the close-up to skip.

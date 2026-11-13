@@ -227,8 +227,12 @@ test('lead-ins in inch programs scale the length and hop', () => {
   const res = DK.process(sqIn, { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1 });
   assert.strictEqual(res.stats.leadIns, 4);
   assert.match(res.text, /^G0 Z0\.0394$/m);
-  // first lead-in: behind (1,0) along +Y by 1.5 mm, plus the offset: Y = (-1.5 + 0.25) / 25.4
-  assert.match(res.text, /^G0 X1 Y-0\.0492$/m);
+  // first lead-in starts 1.5 mm behind (1,0) along +Y: Y = -1.5 / 25.4. The blade still points
+  // +X (the side just cut), so the axis lands 0.25 mm on along X and turns round that point.
+  assert.match(res.text, /^G0 X1\.0098 Y-0\.0591$/m);
+  // without the turn: the axis lands on the lead-in line, offset ahead: Y = (-1.5 + 0.25) / 25.4
+  const plain = DK.process(sqIn, { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, startTurn: false });
+  assert.match(plain.text, /^G0 X1 Y-0\.0492$/m);
 });
 
 // a closed square cut as its own stroke; ccw = anticlockwise
@@ -478,9 +482,9 @@ test('offset test: n ticks under tile n, tile 0 uncorrected, a processed program
   assert.match(zero, /G1 Z-0\.5 F/);
 });
 
-test('offset test: with lead-ins, no slit cuts into any tile', () => {
-  // A slit into a tile would reach well inside it; the blade still lining up after a
-  // lead-in strays about 1 mm at a 6 mm offset (the lead-in is 3 offsets long).
+test('offset test: no tile cuts into another, with your lead-in settings or not', () => {
+  // The test swivels every corner, so the tip stays on each tile's line; allow for the
+  // blade lining up at the very start.
   for (const [o, size] of [[6, 18], [0.5, 10]]) {
     const t = DK.offsetTest({ offsets: [o, o, o], size, depth: 0.5 }, o === 6 ? {} : { offset: o, leadInLength: 3, rampLength: 4 });
     const { distToPath } = require('./sim.cjs');
@@ -521,8 +525,8 @@ test('offset test: cut from Z0 whatever Material top Z says', () => {
   assert.match(t.text, /Z0 its top/);
 });
 
-test('offset test: a tile far above your offset gets a lead-in long enough for it', () => {
-  // your offset 6 with an 18 mm lead-in; the tile at 9.6 mm gets a 28.8 mm one
+test('offset test: a tile far above your offset is cut as true as one near it', () => {
+  // your offset 6; the tile at 9.6 mm gets a ramp of 19.2 mm and swivels its corners
   const t = DK.offsetTest({ offsets: [9.6], size: 39, depth: 0.5 }, {});
   const tips = drag(run(t.text, 0.01), 9.6);
   const { distToPath } = require('./sim.cjs');
@@ -530,4 +534,50 @@ test('offset test: a tile far above your offset gets a lead-in long enough for i
   let worst = 0;
   for (const p of tips) if (inPolygon(p, poly)) worst = Math.max(worst, distToPath(p, edge));
   assert.ok(worst < 9.6 * 0.2, 'the tip reaches ' + worst.toFixed(2) + ' inside');
+});
+
+// ---------- the blade remembers its heading ----------
+const twoCuts = prog(['G0 X0 Y0', 'G1 Z-0.5 F200', 'G1 X20 Y0 F1000', 'G0 Z5',
+  'G0 X40 Y20', 'G1 Z-0.5 F200', 'G1 X40 Y50 F1000', 'G1 X10 Y50', 'G1 X10 Y20', 'G1 X40 Y20']);
+
+test('the next cut turns the blade in place at its start: the tip lands on it and stays on the line', () => {
+  const { distToPath } = require('./sim.cjs');
+  const want = run(twoCuts, 0.05).filter(s => s.z < 0);
+  const offLine = (text) => Math.max(...drag(run(text, 0.01), 6).filter(t => t.y > 15).map(t => distToPath(t, want)));
+  const on = DK.process(twoCuts, { offset: 6, leadIn: false });
+  assert.strictEqual(on.stats.turns, 1, 'one turn: the first cut has no known heading');
+  assert.ok(offLine(on.text) < TOL, 'second cut off the line by ' + offLine(on.text));
+  // it turns shallow: a quarter of the depth by default
+  assert.match(on.text, /^G1 Z-0\.125\b/m);
+  const off = DK.process(twoCuts, { offset: 6, leadIn: false, startTurn: false });
+  assert.strictEqual(off.stats.turns, 0);
+  assert.ok(offLine(off.text) > 3, 'without it the start drags off the line: ' + offLine(off.text));
+});
+
+test('a lead-in after a hop turns in place too, so even a short lead-in lines the blade up', () => {
+  const set = { offset: 6, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, protect: 'none', rampLength: 2, liftOut: 0 };
+  const big = prog(['G0 X0 Y0', 'G1 Z-0.5 F200', 'G1 X60 Y0 F1000', 'G1 X60 Y60', 'G1 X0 Y60', 'G1 X0 Y0']);
+  const corners = [{ x: 60, y: 0, dir: { x: 0, y: 1 } }, { x: 60, y: 60, dir: { x: -1, y: 0 } }, { x: 0, y: 60, dir: { x: 0, y: -1 } }];
+  const zones = corners.map(c => ({ a: { x: c.x - c.dir.x * 1.5, y: c.y - c.dir.y * 1.5 }, b: c }));
+  const on = compareWithLeads(big, DK.process(big, set).text, 6, zones, 0.05, corners);
+  for (const a of on.aligned) assert.ok(a < 3, 'blade ' + a.toFixed(1) + ' deg off the next side at the corner');
+  const off = compareWithLeads(big, DK.process(big, Object.assign({}, set, { startTurn: false })).text, 6, zones, 0.05, corners);
+  assert.ok(Math.max(...off.aligned) > 10, 'without the turn a 1.5 mm lead-in can\'t line a 6 mm blade up: ' + off.aligned);
+});
+
+test('lift-out follows the shape, even when longer than the side it starts on', () => {
+  const { distToPath } = require('./sim.cjs');
+  const sq20 = prog(['G0 X0 Y0', 'G1 Z-0.5 F200', 'G1 X20 Y0 F1000', 'G1 X20 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
+  const res = DK.process(sq20, { offset: 2, leadIn: false, rampLength: 4, liftOut: 25.4 });
+  const want = run(sq20, 0.05).filter(s => s.z < 0);
+  const worst = Math.max(...drag(run(res.text, 0.01), 2).map(t => distToPath(t, want)));
+  assert.ok(worst < TOL, 'the tip leaves the square by ' + worst);
+  assert.ok(res.stats.liftedAlong >= 1);
+});
+
+test('offset test: every corner swivels, and the blade turns in place from tile to tile', () => {
+  const t = DK.offsetTest({ offsets: [5, 6, 7], size: 0, depth: 0.5 }, { leadIn: true, leadInLength: 1.5, rampLength: 2, liftOut: 25.4 });
+  assert.ok(!/^G0 Z1$/m.test(t.text), 'no lead-in hops');
+  assert.match(t.text, /corners swivel/);
+  assert.ok((t.text.match(/^G[23] /gm) || []).length > 9, 'swivels and turns');
 });

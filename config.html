@@ -138,6 +138,8 @@
   .dk-test-tiles .dk-btn { min-height: 40px; padding: 4px 12px !important; flex-direction: column; gap: 0; line-height: 1.2; }
   .dk-test-tiles .dk-btn small { font-size: 0.75em; opacity: 0.8; }
   .dk-test-tiles .dk-btn[aria-pressed="true"] { background: var(--color-accent) !important; color: var(--color-accent-text, #fff) !important; border-color: var(--color-accent) !important; }
+  .dk-warn-text { color: var(--dk-warn); }
+  .dk-warn-text .dk-btn { min-height: 34px; padding: 4px 12px !important; margin-top: 6px; }
   .dk-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; cursor: pointer; }
   .dk-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--color-accent); }
 </style>
@@ -180,8 +182,13 @@
       <div class="dk-field"><label for="dk-rampLength">Ramp in over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-rampLength" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="Each cut starts at the material top and reaches full depth over this distance along the path, so the blade lines up while shallow. Closed shapes recut this stretch at full depth at the end. 0 plunges straight down."></div>
       <div class="dk-field"><label for="dk-liftOut">Lift out over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftOut" type="text" data-unit="length" data-min="0" inputmode="decimal"
-        title="Closed shapes rise to the material top over this distance while still moving forward, over the recut stretch. 0 lifts straight up."></div>
+        title="Closed shapes rise to the material top over this distance while still moving along the shape, over ground already cut. 0 lifts straight up."></div>
+      <div class="dk-field"><label for="dk-turnDepth">Turn at (% of depth)</label><input class="dk-input" id="dk-turnDepth" inputmode="decimal"
+        title="How deep the blade goes to turn in place before a cut, as a percentage of the cut's depth: shallow, so it turns with little drag."></div>
     </div>
+    <label class="dk-check"><input type="checkbox" id="dk-startTurn">
+      <span><b>Turn the blade in place before each cut</b><span class="dk-hint" style="display:block">The blade keeps pointing the way it last cut. Before the next cut, and where it comes down for a lead-in, the tip lands on the start, turns there (shallow), then ramps in already lined up. The program&rsquo;s first cut can&rsquo;t know which way the blade points, so it just ramps in.</span></span></label>
+    <div class="dk-hint dk-warn-text" id="dk-lengths-warn" hidden aria-live="polite"></div>
     <label class="dk-check dk-sub-check"><input type="checkbox" id="dk-leadIn">
       <span><b>Lead into sharp corners</b><span class="dk-hint" style="display:block">Hop up at the corner, come down behind it on the next line extended, and cut into the corner already lined up. Off: every sharp corner swivels in place.</span></span></label>
     <div class="dk-grid" id="dk-leadIn-fields">
@@ -216,7 +223,7 @@
     <details id="dk-test">
       <summary><h3 class="dk-card-title">Offset test: find your blade offset</h3></summary>
       <div class="dk-test-body">
-        <p class="dk-hint">Cuts a row of test shapes in scrap, each with a different blade offset around yours and your other settings (its ramp and lead-in scaled with its offset), numbered by short ticks under them. Cut it, peel it, and pick the tile with the sharpest corners. X0 Y0 on the scrap&rsquo;s front left corner, Z0 on its top.</p>
+        <p class="dk-hint">Cuts a row of test shapes in scrap, each with a different blade offset around yours, numbered by short ticks under them. Every corner swivels (no lead-ins), where a wrong offset shows plainly, and each tile gets a ramp of 2 offsets. Cut it, peel it, and pick the tile with the sharpest corners. X0 Y0 on the scrap&rsquo;s front left corner, Z0 on its top.</p>
         <p class="dk-hint"><b>A first guess for large blades:</b> with the spindle&rsquo;s power off, lower the tip onto paper and turn the blade a full turn by hand. Its tip draws a circle around the holder&rsquo;s centre: the offset is half its diameter (12 mm across: 6 mm). See Help.</p>
         <div class="dk-grid">
           <div class="dk-field"><label for="dk-testStep">Step (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testStep" type="text" data-unit="length" data-min="0" inputmode="decimal"
@@ -624,6 +631,8 @@ var DragKnife = (function () {
     leadInAngle: 60,     // degrees; turns sharper than this hop up and lead back in along the next line
     leadInLength: 18,    // mm; the lead-in starts this far behind the corner, on the next line extended (about 3 offsets)
     hopHeight: 1,        // mm above the material top while hopping to the lead-in
+    startTurn: true,     // turn the blade in place where a cut (or a lead-in) starts, from the way it last pointed
+    turnDepth: 0.25,     // how deep it turns, as a fraction of the cut's depth (0..1)
     saveToFileManager: false,   // the dialog: also save results (and temporary originals) to File Manager › Drag Knife
     // the offset test (the dialog): step 0 = 15 % of the offset, size 0 = from the offsets
     testStep: 0, testCount: 5, testSize: 0, testDepth: 0.3, testFeed: 1000, testUncorrected: true,
@@ -699,6 +708,13 @@ var DragKnife = (function () {
     }
     return out;
   }
+  // The path from length L0 to L1 (clones, split where needed).
+  function slicePath(elems, L0, L1) {
+    var out = prefix(elems, L1), s = 0;
+    while (out.length && s + elemLen(out[0]) <= L0 + 1e-9) { s += elemLen(out[0]); out.shift(); }
+    if (out.length && L0 - s > 1e-9) out[0] = splitAt(out[0], L0 - s)[1];
+    return out;
+  }
   // From element index i on, over path length L, blend Z from `fromZ` back to
   // the element's own Z. Splits the element where the ramp ends.
   function applyRamp(elems, i, fromZ, L) {
@@ -743,6 +759,7 @@ var DragKnife = (function () {
     // the default, so lead-ins switched on always happen.
     if (!(s.leadInAngle > 0)) s.leadInAngle = DEFAULTS.leadInAngle;
     s.liftFraction = Math.max(0, Math.min(1, s.liftFraction));
+    s.turnDepth = Math.max(0, Math.min(1, s.turnDepth));
     s.testCount = Math.max(2, Math.min(9, Math.round(s.testCount)));
     if (!(s.testDepth > 0)) s.testDepth = DEFAULTS.testDepth;
     if (!(s.testFeed > 0)) s.testFeed = DEFAULTS.testFeed;
@@ -906,7 +923,7 @@ var DragKnife = (function () {
     if (lines.length && lines[lines.length - 1] === '') lines.pop();
     var st = { mm: true, abs: true, arcAbs: false, plane: 17, comp: 40, motion: 0, f: null, pos: { x: null, y: null, z: null } };
     var out = [];
-    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, rampsDropped: 0, shortRamps: 0, units: null };
+    var stats = { strokes: 0, rewritten: 0, closed: 0, swivels: 0, lifted: 0, leadIns: 0, turns: 0, holes: 0, tightArcs: 0, spindleRemoved: 0, rampsDropped: 0, shortRamps: 0, units: null };
     var stroke = null;
     var surface = cfg.surfaceZ;
 
@@ -1197,7 +1214,7 @@ var DragKnife = (function () {
     function cornerKind(a, b) {
       var tr = turn(tangentAt(a, 1), tangentAt(b, 0));
       if (Math.abs(tr) <= swRad) return 'link';
-      if (cfg.leadInAngle > 0 && Math.abs(tr) > leadRad && b.z0 < surface) {
+      if (cfg.leadInAngle > 0 && Math.abs(tr) > leadRad && b.z0 < surface && !b.lift) {
         if (protect === 'none') return 'lead';
         if (orient !== 0) {
           var extOutside = (tr > 0) === (orient > 0);
@@ -1218,7 +1235,18 @@ var DragKnife = (function () {
       var zFinal = Math.min.apply(null, elems.map(function (e) { return Math.min(e.z0, e.z1); }));
       var overlap = prefix(elems, rampL + r);
       overlap.forEach(function (o) { o.z0 = zFinal; o.z1 = zFinal; });
-      elems = elems.concat(overlap);
+      // Then lift out while still moving: along the shape (over ground already cut),
+      // rising to the surface over liftOut, never more than the rest of the lap.
+      var liftL = Math.min(cfg.liftOut * scale, Math.max(0, pathLen - (rampL + r)));
+      var liftEls = liftL > 1e-9 ? slicePath(elems, rampL + r, rampL + r + liftL) : [], sL = 0;
+      liftEls.forEach(function (o) {
+        var L = elemLen(o);
+        o.z0 = zFinal + (surface - zFinal) * (sL / liftL); sL += L;
+        o.z1 = zFinal + (surface - zFinal) * Math.min(1, sL / liftL);
+        o.lift = true; o.preZ = [];
+      });
+      elems = elems.concat(overlap, liftEls);
+      if (liftEls.length) stats.liftedAlong = (stats.liftedAlong || 0) + 1;
     }
     // Lifted swivels at sharp corners (back to front so indices hold).
     if (cfg.liftAngle > 0) {
@@ -1233,9 +1261,21 @@ var DragKnife = (function () {
         }
       }
     }
-    // Ramp in from the surface, replacing the plunge below the surface.
+    // The blade remembers which way it last pointed (the way it was last moving in the
+    // material: it keeps that heading in the air). Where that's known and differs from
+    // the cut's first direction by more than a swivel, the axis comes down offset from
+    // the start along the old heading, so the tip lands exactly on the start; it goes
+    // down to a shallow turning depth, swings round the start (the tip turns in place),
+    // and ramps on from there. Unknown (the program's first cut): ramp in as before.
+    var t0 = tangentAt(elems[0], 0), firstZ = elems[0].z0, heading = ctx && ctx.heading;
+    var turnAt = null;
+    if (cfg.startTurn && heading && firstZ < surface - 1e-9 && stroke.start.z > surface + 1e-9 &&
+        Math.abs(turn(heading, t0)) > swRad) {
+      turnAt = surface + (firstZ - surface) * cfg.turnDepth;
+    }
+    // Ramp in from the surface (or the turning depth), replacing the plunge below it.
     var rampIn = rampL > 0 && elems[0].z0 < surface;
-    if (rampIn) applyRamp(elems, 0, surface, rampL);
+    if (rampIn) applyRamp(elems, 0, turnAt !== null ? turnAt : surface, rampL);
 
     var outL = [];
     var mode = null, feed = null;
@@ -1254,23 +1294,37 @@ var DragKnife = (function () {
     outL.push('(dk: cut ' + stats.rewritten + ', ' + (closed ? 'closed' : 'open') + ', from line ' + (stroke.firstLine + 1) + ')');
     for (var ci = 0; ci < stroke.comments.length; ci++) { var cm = commentText(stroke.comments[ci].replace(/^[(;]\s*|\)\s*$/g, ''), LINE_MAX - 2); if (cm) outL.push('(' + cm.replace(/[()]/g, ' ') + ')'); }
 
-    var t0 = tangentAt(elems[0], 0);
     var axis = add(elems[0].from, mul(t0, r));
     var zNow = stroke.start.z;
-    // Move over: the axis starts `offset` ahead of the tip's start point. A rapid
-    // above the work; a feed move when the blade is already down on the surface.
-    if (zNow > surface + 1e-9) emit(0, axis, null, null);
-    else emit(1, axis, null, elems[0].f);
+    var plungeF = null;
+    for (var lf = 0; lf < lead.length; lf++) if (lead[lf].to.z < surface) plungeF = lead[lf].f;
+    // Swing the axis round the tip at P from heading h to heading d, at Z z (the tip
+    // turns in place). Returns the new axis.
+    function turnInPlace(P, h, d, z, f) {
+      var tr0 = turn(h, d), to = add(P, mul(d, r)), ccw0 = tr0 > 0 || Math.abs(Math.abs(tr0) - Math.PI) < 1e-6;
+      stats.turns++;
+      emit(ccw0 ? 3 : 2, to, z, f, arcWords(P, add(P, mul(h, r))));
+      return to;
+    }
+    // Move over: the axis starts `offset` ahead of the tip's start point (or, to turn
+    // in place, along the old heading). A rapid above the work; a feed move when the
+    // blade is already down on the surface.
+    var landAt = turnAt !== null ? add(elems[0].from, mul(heading, r)) : axis;
+    if (zNow > surface + 1e-9) emit(0, landAt, null, null);
+    else emit(1, landAt, null, elems[0].f);
+    var floorZ = turnAt !== null ? turnAt : (rampIn ? surface : -Infinity);
     for (var li = 0; li < lead.length; li++) {
       var lz = lead[li].to.z;
-      if (rampIn && lz < surface) lz = surface;
+      if (lz < floorZ) lz = floorZ;
       if (Math.abs(lz - zNow) < 1e-9) continue;
       emit(lead[li].mode < 2 ? lead[li].mode : 1, null, lz, lead[li].f);
       zNow = lz;
     }
+    if (turnAt !== null) {
+      if (Math.abs(turnAt - zNow) > 1e-9) { emit(1, null, turnAt, plungeF !== null ? plungeF : elems[0].f); zNow = turnAt; }
+      axis = turnInPlace(elems[0].from, heading, t0, null, elems[0].f);
+    }
     if (!rampIn && Math.abs(elems[0].z0 - zNow) > 1e-9) { emit(1, null, elems[0].z0, elems[0].f); zNow = elems[0].z0; }
-    var plungeF = null;
-    for (var lf = 0; lf < lead.length; lf++) if (lead[lf].to.z < surface) plungeF = lead[lf].f;
     var hopZ = surface + Math.max(0, cfg.hopHeight) * scale;
     for (var k = 0; k < elems.length; k++) {
       var el = elems[k];
@@ -1281,11 +1335,20 @@ var DragKnife = (function () {
           // Hop up, go back along this line extended behind the corner, and cut
           // into the corner from there, reaching depth at the corner: the blade
           // is lined up before the cut proper begins.
-          var leadStart = add(sub(el.from, mul(dS, cfg.leadInLength * scale)), mul(dS, r));
+          var leadTip = sub(el.from, mul(dS, cfg.leadInLength * scale)), leadStart = add(leadTip, mul(dS, r));
           stats.leadIns++;
           emit(0, null, hopZ, null);
-          emit(0, leadStart, null, null);
-          emit(1, null, surface, plungeF !== null ? plungeF : el.f);
+          if (cfg.startTurn) {
+            // the blade still points along the side just cut (dE): land so the tip is on
+            // the lead-in start, turn it in place there, shallow, then cut in
+            var zL = surface + (el.z0 - surface) * cfg.turnDepth;
+            emit(0, add(leadTip, mul(dE, r)), null, null);
+            emit(1, null, zL, plungeF !== null ? plungeF : el.f);
+            turnInPlace(leadTip, dE, dS, null, el.f);
+          } else {
+            emit(0, leadStart, null, null);
+            emit(1, null, surface, plungeF !== null ? plungeF : el.f);
+          }
           emit(1, start, el.z0, el.f);
         } else if (kind === 'swivel') {
           // Swivel: the axis swings around the tip at the corner.
@@ -1309,11 +1372,13 @@ var DragKnife = (function () {
       axis = end; zNow = el.z1;
     }
     // Closed shapes: lift out while still moving forward, over recut ground.
-    if (closed && cfg.liftOut > 0 && zNow < surface) {
+    if (closed && cfg.liftOut > 0 && zNow < surface - 1e-9) {
       var dOut = tangentAt(elems[elems.length - 1], 1);
       emit(1, add(axis, mul(dOut, cfg.liftOut * scale)), surface, elems[elems.length - 1].f);
       zNow = surface;
     }
+    // The blade leaves pointing the way it last moved; it keeps that in the air.
+    if (ctx) ctx.heading = tangentAt(elems[elems.length - 1], 1);
     for (var ti = 0; ti < trail.length; ti++) {
       var tz = trail[ti].to.z;
       if (Math.abs(tz - zNow) < 1e-9) continue;
@@ -1421,11 +1486,15 @@ var DragKnife = (function () {
     var feed = opts.feed > 0 ? opts.feed : 1000, plunge = Math.max(50, Math.round(feed / 3));
     var top = cfg.surfaceZ, zCut = top - depth, zSafe = top + Math.max(5, cfg.hopHeight + 3);
     var maxOff = Math.max.apply(null, offs);
-    // Each tile's ramp and lead-in scale with its offset (the blade needs a few offsets
-    // to line up), so a tile is judged by its offset, not by a lead-in too short for it.
-    function scaled(len, o) { return cfg.offset > 0 ? len * o / cfg.offset : len; }
-    // room between tiles for the lead-in slits and swivels, so no tile cuts its neighbour
-    var gap = Math.max(s * 0.5, (cfg.leadInAngle > 0 ? scaled(cfg.leadInLength, maxOff) : 0) + maxOff * 2 + 2);
+    // Every corner swivels (no lead-ins): a swivel shows a wrong offset right at the
+    // corner (rounded when too small, a loop when too big), where a lead-in would line
+    // the blade up anyway and hide it. Each tile gets the lengths that suit its offset,
+    // whatever the saved ones are, so tiles differ only by offset: a ramp of 2 offsets
+    // and a lift-out of at most 1. The swivel angle, turning depth and the rest are yours.
+    cfg.leadInAngle = 0;
+    function suited(o) { return { rampLength: 2 * o, liftOut: Math.min(cfg.liftOut, o) }; }
+    // room between tiles for the swivels, so no tile cuts its neighbour
+    var gap = Math.max(s * 0.5, maxOff * 2 + 2);
     var tickL = s * 0.25, tickGap = Math.max(s * 0.2, maxOff + 1), y0 = gap, yShape = y0 + tickL + tickGap;
     function path(pts) {
       var L = ['G0 X' + fmt(pts[0][0]) + ' Y' + fmt(pts[0][1]), 'G1 Z' + fmt(zCut) + ' F' + plunge];
@@ -1433,11 +1502,12 @@ var DragKnife = (function () {
       L.push('G0 Z' + fmt(zSafe));
       return L;
     }
-    var body = [], tiles = [], x = gap;
+    var body = [], tiles = [], x = gap, heading = null;
     if (opts.uncorrected) {
       body.push('(tile 0: as drawn, no correction)');
       body = body.concat(path(testTile(x, yShape, s)));
       tiles.push({ n: 0, offset: 0, x: x, y: yShape });
+      heading = v(1, 0);   // tile 0 ends along its bottom, going +X
       x += s + gap;
     }
     offs.forEach(function (o, k) {
@@ -1449,13 +1519,12 @@ var DragKnife = (function () {
       }
       var c = {}; for (var key in cfg) c[key] = cfg[key];
       c.offset = o;
-      c.rampLength = scaled(cfg.rampLength, o);
-      c.leadInLength = scaled(cfg.leadInLength, o);
-      var res = processPass(raw.join('\n') + '\n', c, null, (function () {
-        // auto: the tile is a part; its ticks are open paths
-        if (c.protect !== 'auto' || !(c.leadInAngle > 0)) return {};
-        return { holes: analyzeWith(raw.join('\n') + '\n', c, null).holes };
-      })());
+      var su = suited(o); c.rampLength = su.rampLength; c.liftOut = su.liftOut;
+      // auto: the tile is a part, its ticks open paths; the blade's heading carries over
+      var tctx = { heading: heading };
+      if (c.protect === 'auto' && c.leadInAngle > 0) tctx.holes = analyzeWith(raw.join('\n') + '\n', c, null).holes;
+      var res = processPass(raw.join('\n') + '\n', c, null, tctx);
+      heading = tctx.heading;
       body.push('(tile ' + n + ': offset ' + fmt(o) + 'mm)');
       res.text.split('\n').forEach(function (l) { if (l && !/^\(dragknife/i.test(l)) body.push(l); });
       tiles.push({ n: n, offset: o, x: x, y: yShape });
@@ -1465,7 +1534,7 @@ var DragKnife = (function () {
     var head = headerLines(['processed: offset test, ' + offs.length + ' tiles left to right']
       .concat(offs.map(function (o, k) { return 'tile ' + (k + 1) + ' ' + fmt(o) + 'mm'; }))
       .concat(opts.uncorrected ? ['tile 0 at the left uncorrected'] : [],
-        ['ramp and lead-in scaled with each offset', 'X0 Y0 front left of scrap', 'Z0 its top', 'depth ' + fmt(depth) + 'mm', 'size ' + fmt(Math.round(x * 10) / 10) + ' x ' + fmt(Math.round(height * 10) / 10) + 'mm']));
+        ['corners swivel', 'ramp 2 offsets', 'X0 Y0 front left of scrap', 'Z0 its top', 'depth ' + fmt(depth) + 'mm', 'size ' + fmt(Math.round(x * 10) / 10) + ' x ' + fmt(Math.round(height * 10) / 10) + 'mm']));
     var text = head.concat(['G21 G90 G17', 'G0 Z' + fmt(zSafe)], body, ['G0 Z' + fmt(zSafe), 'M30']).join('\n') + '\n';
     return { text: text, offsets: offs, tiles: tiles, width: x, height: height, size: s, gap: gap };
   }
@@ -1480,12 +1549,13 @@ var DragKnife = (function () {
 if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
 /* END lib/drag-knife.cjs */
 
-  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'rampLength', 'liftOut', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp',
+  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'rampLength', 'liftOut', 'turnDepth', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp',
     'testStep', 'testCount', 'testSize', 'testDepth', 'testFeed'];
   var AUTO_EMPTY = { testStep: 1, testSize: 1 };   // empty (or 0) = worked out from the offsets
   // liftFraction is shown as a percentage.
-  function shown(k, val) { return k === 'liftFraction' ? Math.round(val * 1000) / 10 : val; }
-  function stored(k, val) { return k === 'liftFraction' ? val / 100 : val; }
+  var PERCENT = { liftFraction: 1, turnDepth: 1 };
+  function shown(k, val) { return PERCENT[k] ? Math.round(val * 1000) / 10 : val; }
+  function stored(k, val) { return PERCENT[k] ? val / 100 : val; }
 
   var cfg = DragKnife.readSettings(initialConfig && typeof initialConfig === 'object' ? initialConfig : {});
   // Lengths are stored in mm and shown in the operator's units (ncSender's unitsPreference),
@@ -1501,7 +1571,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function showUnits() {
     ROOT.querySelectorAll('.dk-unit').forEach(function(u) { u.textContent = imperial ? 'in' : 'mm'; });
     Object.keys(LENGTHS).forEach(showField);
-    if (typeof testPlan === 'function' && $('dk-test-plan')) { testPlan(); showPick(); }
+    if (typeof testPlan === 'function' && $('dk-test-plan')) { testPlan(); showPick(); lengthsCheck(); }
   }
   FIELDS.forEach(function(k) {
     var el = $('dk-' + k);
@@ -1512,7 +1582,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       if (AUTO_EMPTY[k] && String(el.value).trim() === '') n = 0;
       else if (LENGTHS[k]) { n = NU.textToMm(el.value, imperial); if (n === null) problem = NU.unitValueProblem(el.value) || 'not a length'; }
       else { var tx = String(el.value).replace(',', '.').trim(); n = tx === '' ? NaN : Number(tx); }
-      var bad = n === null || !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (k === 'liftFraction' && n > 100) ||
+      var bad = n === null || !isFinite(n) || (k !== 'surfaceZ' && n < 0) || (PERCENT[k] && n > 100) ||
         (k === 'testCount' && (n < 2 || n > 9 || n !== Math.round(n))) || ((k === 'testDepth' || k === 'testFeed') && !(n > 0));
       if (k === 'testCount' && bad) problem = 'a whole number from 2 to 9';
       el.classList.toggle('dk-bad', bad);
@@ -1562,6 +1632,27 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   var saveFiles = $('dk-saveFiles');
   saveFiles.checked = !!cfg.saveToFileManager;
   saveFiles.addEventListener('change', function() { cfg.saveToFileManager = saveFiles.checked; save(); });
+  var startTurn = $('dk-startTurn');
+  startTurn.checked = !!cfg.startTurn;
+  function startTurnShown() { var f = $('dk-turnDepth'); f.disabled = !cfg.startTurn; f.closest('.dk-field').classList.toggle('dk-off', !cfg.startTurn); }
+  startTurnShown();
+  startTurn.addEventListener('change', function() { cfg.startTurn = startTurn.checked; save(); startTurnShown(); refresh(); });
+  // Lengths too short for the blade offset (after picking Custom and typing a big
+  // offset, say): the blade needs a couple of offsets of travel to line up.
+  function lengthsCheck() {
+    var box = $('dk-lengths-warn'), o = cfg.offset, short = [];
+    if (o > 0 && cfg.rampLength < o) short.push('<i>Ramp in over</i> ' + esc(lengthSay(cfg.rampLength)));
+    if (o > 0 && cfg.leadIn && cfg.leadInLength < 2 * o) short.push('<i>Lead-in length</i> ' + esc(lengthSay(cfg.leadInLength)));
+    box.hidden = !short.length;
+    if (!short.length) { box.innerHTML = ''; return; }
+    box.innerHTML = 'For a ' + esc(lengthSay(o)) + ' blade offset, ' + short.join(' and ') + (short.length > 1 ? ' are' : ' is') +
+      ' short: the blade needs about 2 to 3 offsets of travel to line up. ' +
+      '<button type="button" class="dk-btn dk-ghost" id="dk-lengths-fix">Use ' + esc(lengthSay(2 * o)) + ' ramp, ' + esc(lengthSay(3 * o)) + ' lead-in</button>';
+    $('dk-lengths-fix').addEventListener('click', function() {
+      cfg.rampLength = Math.round(2 * o * 100) / 100; cfg.leadInLength = Math.round(3 * o * 100) / 100;
+      showField('rampLength'); showField('leadInLength'); bladeShown(); save(); refresh();
+    });
+  }
   var leadIn = $('dk-leadIn');
   leadIn.checked = !!cfg.leadIn;
   function leadInShown() {
@@ -1724,7 +1815,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function refresh() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(function() { checkAuto(); side(); }, 250);
-    testPlan(); showPick();
+    testPlan(); showPick(); lengthsCheck();
   }
   var autoRun = 0;
   async function checkAuto() {
@@ -2457,7 +2548,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '</div>' +
       '<h4>Into and out of each cut</h4><p>The blade can’t turn while it’s buried, so each cut starts at the material top and ramps down along the path (<i>Ramp in over</i>), lining up while shallow. A closed shape then recuts its start at full depth (the overcut) and rises while still moving (<i>Lift out over</i>), so it drops out cleanly.</p><div class="dk-figs">' +
       fig('Depth along one closed square', helpProfile(), 'Ramp in, the cut at depth, the overcut past the start, and the lift out.', true) + '</div>' +
-      '<h4>Find your blade offset: the offset test</h4><p>Under the settings, <b>Offset test</b> loads a row of tiles like these, each processed with a different offset around yours (and numbered by ticks under it). Cut it in scrap, peel it, and pick the tile with the sharpest corners and point: that sets your blade offset. <b>Narrow it down</b> then cuts a finer row around it. Here the blade really trails ' + lengthSay(Rt) + '; off-line cuts show in amber and red.</p><div class="dk-figs">' +
+      '<h4>Find your blade offset: the offset test</h4><p>Under the settings, <b>Offset test</b> loads a row of tiles like these, each processed with a different offset around yours (and numbered by ticks under it). Every corner swivels, so a wrong offset shows at the corners. Cut it in scrap, peel it, and pick the tile with the sharpest corners and point: that sets your blade offset. <b>Narrow it down</b> then cuts a finer row around it. Here the blade really trails ' + lengthSay(Rt) + '; off-line cuts show in amber and red.</p><div class="dk-figs">' +
       fig('Offset too small (' + lengthSay(Rt * 0.6) + ')', helpFigure(tileProg, tileWith(Rt * 0.6), Rt), 'The corners round off inside and the point is blunt: raise it.') +
       fig('Right (' + lengthSay(Rt) + ')', helpFigure(tileProg, tileWith(Rt), Rt), 'Square corners and a sharp point.') +
       fig('Offset too big (' + lengthSay(Rt * 1.6) + ')', helpFigure(tileProg, tileWith(Rt * 1.6), Rt), 'The tip overshoots each corner and hooks back: lower it.') +
@@ -2474,7 +2565,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '<li><b>Swivel above:</b> turns sharper than this get a swivel. Gentler bends just drag.</li>' +
       '<li><b>Material top Z:</b> moves below this are cuts. 0 when Z0 is the top of the material.</li>' +
       '<li><b>Remove spindle starts:</b> M3, M4 and S come out (commented, so you can see them). A drag knife must never spin.</li>' +
-      '<li><b>Lead into sharp corners:</b> on by default for turns over 60°. The blade needs to travel about 2 to 3 offsets to swing into line, so make the lead-in about 3 offsets long (18 mm for 6 mm) and the ramp about 2.</li>' +
+      '<li><b>Lead into sharp corners:</b> on by default for turns over 60°. The blade needs to travel about 2 to 3 offsets to swing into line, so make the lead-in about 3 offsets long (18 mm for 6 mm) and the ramp about 2. The dialog warns when they’re shorter, with a button to set them.</li>' +
+      '<li><b>Turn the blade in place before each cut:</b> the blade keeps pointing the way it last cut, even in the air. Before the next cut (and where it comes down for a lead-in) the tip lands exactly on the start, the blade turns there at <i>Turn at</i> (25 % of the depth), then ramps in lined up. The first cut of a program can’t know which way the blade points, so it just ramps in.</li>' +
+      '<li><b>Lift out over:</b> closed shapes rise to the top over this, moving along the shape over ground already cut.</li>' +
       '<li><b>Lift at sharp corners:</b> for thick material, the blade rises partway while it swivels.</li>' +
       '<li><b>Save to File Manager:</b> keeps each result, and the original when it isn’t saved already, so it can be processed again later.</li></ul>' +
       '<h4>Tips</h4><ul>' +
@@ -2588,7 +2681,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   }
   $('dk-close').addEventListener('click', function() { window.postMessage({ type: 'close-plugin-dialog' }, '*'); });
 
-  testPlan(); showPick();
+  testPlan(); showPick(); lengthsCheck();
   readLoaded().then(function() { showSource(); checkAuto(); side(); });
 })();
 </script>

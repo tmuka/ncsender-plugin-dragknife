@@ -16,7 +16,13 @@ slit in the waste](docs/images/corners.svg)
   in place, giving a sharp corner.
 - **Into the cut:** each cut starts at the material top and ramps to full depth along the path, so the blade lines
   up while it's shallow. A back-and-forth ramp already in the program (QuickCut's) is replaced by this one.
-- **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving.
+- **Turn in place before each cut (on by default):** the blade keeps pointing the way it last cut, even in the air.
+  Before the next cut, and where it comes down for a lead-in, the holder lands so the tip is exactly on the start, goes
+  down to a shallow turning depth (*Turn at*, 25 % of the depth), swings round so the tip turns in place, then ramps in
+  already lined up: no scratch off the line at the start. The program's first cut can't know which way the blade
+  points, so it only ramps in.
+- **Out of the cut:** closed shapes recut their start at full depth, then rise to the top while still moving along
+  the shape (*Lift out over*, never past the rest of the lap).
 - **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default; each line is left commented out and marked
   "removed by Drag Knife". M5 stays.
 - **Lead-in corners (on by default; a switch turns them off):** at corners sharper than *Lead in above* (60°), the blade hops up, comes down behind the
@@ -66,8 +72,9 @@ on: it saves the original and each result to File Manager › Drag Knife.
 ## Finding your blade offset
 
 Under the settings, **Offset test** loads a row of test tiles to cut in scrap (X0 Y0 on its front left corner, Z0 on
-its top). Each tile is a square with a sharp 40° point on top, processed with a different blade offset around yours
-and your other settings (its ramp and lead-in scaled with its offset), and numbered by short ticks under it; tile 0 at the left, if you keep it, is cut as drawn
+its top). Each tile is a square with a sharp 40° point on top, processed with a different blade offset around yours.
+Every corner swivels (no lead-ins), so a wrong offset shows right at the corners, and each tile gets a ramp of 2
+offsets whatever yours is; the blade turns in place before each cut. Tiles are numbered by short ticks under it; tile 0 at the left, if you keep it, is cut as drawn
 with no correction. Cut it, peel it, and open Drag Knife again: under **Which tile cut best?** pick the tile with the
 square corners and the sharpest point. That sets your blade offset. Rounded corners and a blunt point mean the offset
 is too small; little hooks past the corners mean it's too big. **Narrow it down** then sets a step a third as big for
