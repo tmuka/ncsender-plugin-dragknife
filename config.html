@@ -216,7 +216,7 @@
     <details id="dk-test">
       <summary><h3 class="dk-card-title">Offset test: find your blade offset</h3></summary>
       <div class="dk-test-body">
-        <p class="dk-hint">Cuts a row of test shapes in scrap, each with a different blade offset around yours and your other settings, numbered by short ticks under them. Cut it, peel it, and pick the tile with the sharpest corners. X0 Y0 on the scrap&rsquo;s front left corner, Z0 on its top.</p>
+        <p class="dk-hint">Cuts a row of test shapes in scrap, each with a different blade offset around yours and your other settings (its ramp and lead-in scaled with its offset), numbered by short ticks under them. Cut it, peel it, and pick the tile with the sharpest corners. X0 Y0 on the scrap&rsquo;s front left corner, Z0 on its top.</p>
         <div class="dk-grid">
           <div class="dk-field"><label for="dk-testStep">Step (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testStep" type="text" data-unit="length" data-min="0" inputmode="decimal"
             title="The difference in offset from one tile to the next. Empty or 0: 15 % of your blade offset."></div>
@@ -742,6 +742,11 @@ var DragKnife = (function () {
     // the default, so lead-ins switched on always happen.
     if (!(s.leadInAngle > 0)) s.leadInAngle = DEFAULTS.leadInAngle;
     s.liftFraction = Math.max(0, Math.min(1, s.liftFraction));
+    s.testCount = Math.max(2, Math.min(9, Math.round(s.testCount)));
+    if (!(s.testDepth > 0)) s.testDepth = DEFAULTS.testDepth;
+    if (!(s.testFeed > 0)) s.testFeed = DEFAULTS.testFeed;
+    if (!(s.testStep >= 0)) s.testStep = 0;
+    if (!(s.testSize >= 0)) s.testSize = 0;
     return s;
   }
 
@@ -1376,12 +1381,16 @@ var DragKnife = (function () {
   // ---------- the offset test ----------
   // Offsets for a test: count values centred on `center`, `step` apart, all above 0
   // (shifted up when the low end would reach 0), rounded to 0.01 mm.
+  // A step under 0.01 mm is 0.01 (finer can't be told apart, and rounds to repeats); a
+  // step that would reach 0 is made smaller, so the row stays centred on the guess.
+  var TEST_STEP_MIN = 0.01;
   function testOffsets(center, step, count) {
     count = Math.max(2, Math.min(9, Math.round(count) || 5));
-    step = step > 0 ? step : Math.max(0.01, center * 0.15);
-    var lo = center - step * (count - 1) / 2;
-    if (lo < step / 2) lo = step / 2 > 0.01 ? step / 2 : 0.01;
-    var out = [];
+    step = step > 0 ? step : center * 0.15;
+    var half = (count - 1) / 2;
+    if (center - step * half < center * 0.1) step = center * 0.9 / half;
+    step = Math.max(TEST_STEP_MIN, Math.round(step * 100) / 100);
+    var lo = Math.max(TEST_STEP_MIN, center - step * half), out = [];
     for (var i = 0; i < count; i++) out.push(Math.round((lo + i * step) * 100) / 100);
     return out;
   }
@@ -1403,14 +1412,19 @@ var DragKnife = (function () {
   // opts: { offsets: [mm], size: mm, depth: mm, uncorrected: bool, feed: mm/min }
   function offsetTest(opts, rawSettings) {
     var cfg = active(rawSettings);
+    // The test is in mm with Z0 on the scrap's top, whatever the program setting says.
+    cfg.surfaceZ = 0;
     var offs = (opts.offsets || []).filter(function (o) { return o > 0; });
     if (!offs.length) throw new Error('No offsets to test.');
     var s = opts.size > 0 ? opts.size : testSize(offs), depth = opts.depth > 0 ? opts.depth : 0.3;
     var feed = opts.feed > 0 ? opts.feed : 1000, plunge = Math.max(50, Math.round(feed / 3));
     var top = cfg.surfaceZ, zCut = top - depth, zSafe = top + Math.max(5, cfg.hopHeight + 3);
     var maxOff = Math.max.apply(null, offs);
+    // Each tile's ramp and lead-in scale with its offset (the blade needs a few offsets
+    // to line up), so a tile is judged by its offset, not by a lead-in too short for it.
+    function scaled(len, o) { return cfg.offset > 0 ? len * o / cfg.offset : len; }
     // room between tiles for the lead-in slits and swivels, so no tile cuts its neighbour
-    var gap = Math.max(s * 0.5, (cfg.leadInAngle > 0 ? cfg.leadInLength : 0) + maxOff * 2 + 2);
+    var gap = Math.max(s * 0.5, (cfg.leadInAngle > 0 ? scaled(cfg.leadInLength, maxOff) : 0) + maxOff * 2 + 2);
     var tickL = s * 0.25, tickGap = Math.max(s * 0.2, maxOff + 1), y0 = gap, yShape = y0 + tickL + tickGap;
     function path(pts) {
       var L = ['G0 X' + fmt(pts[0][0]) + ' Y' + fmt(pts[0][1]), 'G1 Z' + fmt(zCut) + ' F' + plunge];
@@ -1434,6 +1448,8 @@ var DragKnife = (function () {
       }
       var c = {}; for (var key in cfg) c[key] = cfg[key];
       c.offset = o;
+      c.rampLength = scaled(cfg.rampLength, o);
+      c.leadInLength = scaled(cfg.leadInLength, o);
       var res = processPass(raw.join('\n') + '\n', c, null, (function () {
         // auto: the tile is a part; its ticks are open paths
         if (c.protect !== 'auto' || !(c.leadInAngle > 0)) return {};
@@ -1448,7 +1464,7 @@ var DragKnife = (function () {
     var head = headerLines(['processed: offset test, ' + offs.length + ' tiles left to right']
       .concat(offs.map(function (o, k) { return 'tile ' + (k + 1) + ' ' + fmt(o) + 'mm'; }))
       .concat(opts.uncorrected ? ['tile 0 at the left uncorrected'] : [],
-        ['X0 Y0 front left of scrap', 'Z' + fmt(top) + ' its top', 'depth ' + fmt(depth) + 'mm', 'size ' + fmt(Math.round(x * 10) / 10) + ' x ' + fmt(Math.round(height * 10) / 10) + 'mm']));
+        ['ramp and lead-in scaled with each offset', 'X0 Y0 front left of scrap', 'Z0 its top', 'depth ' + fmt(depth) + 'mm', 'size ' + fmt(Math.round(x * 10) / 10) + ' x ' + fmt(Math.round(height * 10) / 10) + 'mm']));
     var text = head.concat(['G21 G90 G17', 'G0 Z' + fmt(zSafe)], body, ['G0 Z' + fmt(zSafe), 'M30']).join('\n') + '\n';
     return { text: text, offsets: offs, tiles: tiles, width: x, height: height, size: s, gap: gap };
   }
@@ -1574,7 +1590,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     try {
       var o = testOpts(), t = DragKnife.offsetTest(o, cfg);
       plan.textContent = plural(t.offsets.length, 'tile') + ': ' + mmList(t.offsets) + (o.uncorrected ? ', and tile 0 uncorrected' : '') + '; each ' + lengthSay(o.size) +
-        ' wide. Needs about ' + NU.formatMm(Math.ceil(t.width), imperial) + ' × ' + lengthSay(Math.ceil(t.height)) + ' of scrap.';
+        ' wide. Needs about ' + NU.formatMm(Math.ceil(t.width), imperial) + ' × ' + lengthSay(Math.ceil(t.height)) + ' of scrap.' +
+        (cfg.surfaceZ !== 0 ? ' It cuts from Z0 on the scrap’s top: your Material top Z (' + cfg.surfaceZ + ') is for programs, not the test.' : '');
       btn.disabled = false;
       return t;
     } catch (e) { plan.textContent = e.message || String(e); btn.disabled = true; return null; }
@@ -1598,13 +1615,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     var o = offs[k], step = offs.length > 1 ? (offs[offs.length - 1] - offs[0]) / (offs.length - 1) : 0;
     cfg.offset = o; showField('offset'); bladeShown(); save(); refresh(); showPick(); testPlan();
     var end = offs.length > 2 && (k === 0 || k === offs.length - 1);
+    var finer = Math.round(step / 3 * 100) / 100, finest = !end && finer < 0.01;
     var said = $('dk-test-picked');
+    if (finest) {
+      said.innerHTML = 'Blade offset set to <b>' + esc(lengthSay(o)) + '</b> (tile ' + (k + 1) + '). The tiles were ' + esc(lengthSay(step)) + ' apart: as fine as the test goes.';
+      return;
+    }
     said.innerHTML = 'Blade offset set to <b>' + esc(lengthSay(o)) + '</b> (tile ' + (k + 1) + '). ' +
       (end ? 'That’s the end of the row, so the best may be beyond it: load the test again, centred on it now. '
         : 'For a closer look, cut a finer test around it: ') +
-      '<button type="button" class="dk-btn dk-ghost" id="dk-test-narrow">' + (end ? 'Same step, centred here' : 'Narrow it down (step ' + esc(lengthSay(Math.max(0.01, Math.round(step / 3 * 100) / 100))) + ')') + '</button>';
+      '<button type="button" class="dk-btn dk-ghost" id="dk-test-narrow">' + (end ? 'Same step, centred here' : 'Narrow it down (step ' + esc(lengthSay(finer)) + ')') + '</button>';
     $('dk-test-narrow').addEventListener('click', function() {
-      if (!end && step > 0) { cfg.testStep = Math.max(0.01, Math.round(step / 3 * 100) / 100); showField('testStep'); save(); }
+      if (!end && step > 0) { cfg.testStep = finer; showField('testStep'); save(); }
       testPlan();
       said.textContent = 'Ready: ' + $('dk-test-plan').textContent + ' Press Load offset test.';
       $('dk-test-load').focus();
@@ -1701,6 +1723,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function refresh() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(function() { checkAuto(); side(); }, 250);
+    testPlan(); showPick();
   }
   var autoRun = 0;
   async function checkAuto() {
@@ -2166,7 +2189,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
         var piv = a && a.cut && b.cut && a.tip && b.tip && Math.hypot(a.tip.x - b.tip.x, a.tip.y - b.tip.y) < 0.3 * Math.hypot(a.x - b.x, a.y - b.y);
         if (piv && s0 < 0) s0 = q - 1;
         if (!piv && s0 >= 0) {
-          if (dist[q - 1] - dist[s0] >= R * 0.5) list.push({ a: back(s0, R * 2), core: s0, b: fwd(q - 1, R * 2), what: 'a swivel' });
+          // a swivel: the holder swings at least half an offset while the tip stays nearly
+          // put (a tight arc also moves the tip slower than the holder, but goes somewhere)
+          var tipGo = 0;
+          for (var t2 = s0 + 1; t2 <= q - 1; t2++) tipGo += Math.hypot(samples[t2].tip.x - samples[t2 - 1].tip.x, samples[t2].tip.y - samples[t2 - 1].tip.y);
+          if (dist[q - 1] - dist[s0] >= R * 0.5 && tipGo < R * 0.1) list.push({ a: back(s0, R * 2), core: s0, b: fwd(q - 1, R * 2), what: 'a swivel' });
           s0 = -1;
         }
       }
@@ -2180,7 +2207,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
           list.push({ a: back(up, R * 1.5), core: up, b: fwd(q, cfg.leadInLength * k + R * 2), what: 'a lead-in' });
         }
       }
-      list.sort(function(x, y) { return x.a - y.a; });
+      // the blade lining up after a lead-in can look like a swivel: it's part of the lead-in
+      var leads = list.filter(function(c) { return c.what === 'a lead-in'; });
+      list = list.filter(function(c) { return c.what === 'a lead-in' || !leads.some(function(l) { return c.core >= l.a && c.core <= l.b; }); });
+      // in the order they finish (the knife past their end)
+      list.sort(function(x, y) { return x.b - y.b; });
       // straight: cutting, and the holder's heading turns under 12° from half an offset
       // before to half an offset after
       var straight = new Array(n);
@@ -2206,6 +2237,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       }
       var w = Math.max(zoomW, (x1 - x0 + 2 * zR) * 1.15, (y1 - y0 + 2 * zR) * 1.15);
       var passMs = Math.max(900, Math.min(2400, travel / (zR * 3) * 1000));
+      while (zReplay.firstChild) zReplay.removeChild(zReplay.firstChild);
       replay = { c: c, t0: now, pass: passMs, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: w, drawn: -1 };
       zsvg.setAttribute('viewBox', [replay.cx - w / 2, -(replay.cy + w / 2), w, w].map(function(v) { return v.toFixed(5); }).join(' '));
       zTrail.setAttribute('opacity', 0.3);
@@ -2234,19 +2266,33 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       var fi = c.a + f * (c.b - c.a), idx = Math.floor(fi), u = fi - idx, nx = samples[Math.min(c.b, idx + 1)];
       $('dk-zoom-cap').textContent = 'Instant replay, slow motion: ' + c.what + ' (click to skip)';
       if (idx !== r.drawn) {
-        while (zReplay.firstChild) zReplay.removeChild(zReplay.firstChild);
-        var line = null, lk = null, hop = false;
-        for (var q = c.a; q <= idx; q++) {
-          var m = samples[q];
-          if (!m.cut || !m.tip) { line = null; if (q > c.a && samples[q - 1].cut) hop = true; continue; }
-          var kd = sc.kind(m.tip, hop);
-          if (!line || kd !== lk) {
-            var prev = line && line.getAttribute('points').split(' ').pop();
-            line = el('polyline', { points: prev || '', fill: 'none', stroke: LOOK[kd], 'stroke-width': kd === 'cut' ? 2 : 2.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': NSS }, zReplay);
-            lk = kd;
+        // the replayed path's pieces (by colour) are worked out once per replay; each frame
+        // only sets how much of each shows
+        if (!r.pieces) {
+          r.pieces = [];
+          var cur2 = null, hop = false;
+          for (var q = c.a; q <= c.b; q++) {
+            var m = samples[q];
+            if (!m.cut || !m.tip) { cur2 = null; if (q > c.a && samples[q - 1].cut) hop = true; continue; }
+            var kd = sc.kind(m.tip, hop), pt = m.tip.x.toFixed(4) + ',' + m.tip.y.toFixed(4);
+            if (!cur2 || kd !== cur2.kd) {
+              var joint = cur2 ? cur2.pts[cur2.pts.length - 1] : null;
+              cur2 = { kd: kd, from: q, pts: joint ? [joint] : [], at: [] };
+              if (joint) cur2.at.push(q - 1);
+              cur2.el = el('polyline', { points: '', fill: 'none', stroke: LOOK[kd], 'stroke-width': kd === 'cut' ? 2 : 2.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': NSS }, zReplay);
+              r.pieces.push(cur2);
+            }
+            cur2.pts.push(pt); cur2.at.push(q);
           }
-          line.setAttribute('points', (line.getAttribute('points') + ' ' + m.tip.x.toFixed(4) + ',' + m.tip.y.toFixed(4)).trim());
         }
+        var line = null;
+        r.pieces.forEach(function(pc) {
+          var nShow = 0; while (nShow < pc.at.length && pc.at[nShow] <= idx) nShow++;
+          var str = nShow > 1 ? pc.pts.slice(0, nShow).join(' ') : '';
+          pc.el.setAttribute('points', str); pc.el.removeAttribute('data-base');
+          // the piece the knife is in now gets the smooth end below
+          if (nShow > 1 && pc.at[0] <= idx && idx <= pc.at[pc.at.length - 1]) line = pc.el;
+        });
         r.drawn = idx; r.tail = line;
       }
       // between samples: the knife and the end of the path move smoothly

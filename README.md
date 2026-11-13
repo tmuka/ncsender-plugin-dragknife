@@ -67,7 +67,7 @@ on: it saves the original and each result to File Manager › Drag Knife.
 
 Under the settings, **Offset test** loads a row of test tiles to cut in scrap (X0 Y0 on its front left corner, Z0 on
 its top). Each tile is a square with a sharp 40° point on top, processed with a different blade offset around yours
-and your other settings, and numbered by short ticks under it; tile 0 at the left, if you keep it, is cut as drawn
+and your other settings (its ramp and lead-in scaled with its offset), and numbered by short ticks under it; tile 0 at the left, if you keep it, is cut as drawn
 with no correction. Cut it, peel it, and open Drag Knife again: under **Which tile cut best?** pick the tile with the
 square corners and the sharpest point. That sets your blade offset. Rounded corners and a blunt point mean the offset
 is too small; little hooks past the corners mean it's too big. **Narrow it down** then sets a step a third as big for

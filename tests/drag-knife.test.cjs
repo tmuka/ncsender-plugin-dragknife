@@ -494,3 +494,40 @@ test('offset test: with lead-ins, no slit cuts into any tile', () => {
     assert.strictEqual(t.text.split('\n').filter(l => /^\(tile /.test(l)).length, 3);
   }
 });
+
+test('offset test: steps at least 0.01 mm, no repeats, the row stays centred above 0', () => {
+  const a = DK.testOffsets(6, 0.005, 5);
+  assert.strictEqual(new Set(a).size, 5, 'repeats: ' + a);
+  const b = DK.testOffsets(1, 3, 9);
+  assert.ok(b.every(o => o > 0) && b.includes(1), 'centred on 1: ' + b);
+  const c = DK.testOffsets(0.25, 0, 5);
+  assert.ok(c.includes(0.25) && c.every(o => o > 0), 'auto step: ' + c);
+});
+
+test('offset test settings are bounded when read', () => {
+  const s = DK.readSettings({ testCount: 100, testDepth: -1, testFeed: 0, testStep: -2, lastTest: 'x;y' });
+  assert.strictEqual(s.testCount, 9);
+  assert.strictEqual(s.testDepth, DK.DEFAULTS.testDepth);
+  assert.strictEqual(s.testFeed, DK.DEFAULTS.testFeed);
+  assert.strictEqual(s.testStep, 0);
+  assert.strictEqual(s.lastTest, '');
+  assert.strictEqual(DK.readSettings({ testCount: 1 }).testCount, 2);
+});
+
+test('offset test: cut from Z0 whatever Material top Z says', () => {
+  const t = DK.offsetTest({ offsets: [1], size: 10, depth: 0.3 }, { offset: 1, surfaceZ: -2 });
+  const zs = t.text.split('\n').map(l => /Z(-?[\d.]+)/.exec(l)).filter(Boolean).map(m => +m[1]);
+  assert.strictEqual(Math.min(...zs), -0.3);
+  assert.match(t.text, /Z0 its top/);
+});
+
+test('offset test: a tile far above your offset gets a lead-in long enough for it', () => {
+  // your offset 6 with an 18 mm lead-in; the tile at 9.6 mm gets a 28.8 mm one
+  const t = DK.offsetTest({ offsets: [9.6], size: 39, depth: 0.5 }, {});
+  const tips = drag(run(t.text, 0.01), 9.6);
+  const { distToPath } = require('./sim.cjs');
+  const tile = t.tiles[0], poly = DK.testTile(tile.x, tile.y, 39).slice(0, -1), edge = poly.concat([poly[0]]).map(p => ({ x: p[0], y: p[1] }));
+  let worst = 0;
+  for (const p of tips) if (inPolygon(p, poly)) worst = Math.max(worst, distToPath(p, edge));
+  assert.ok(worst < 9.6 * 0.2, 'the tip reaches ' + worst.toFixed(2) + ' inside');
+});
