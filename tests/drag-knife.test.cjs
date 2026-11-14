@@ -719,3 +719,18 @@ test('passes: the next pass ramps down while moving, no bounce (QuickCut straigh
   const c = compare(t, res.text, 2);
   assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
 });
+
+test('a tiny arc rounding a corner (QuickCut, 0.03 mm bit) is a sharp corner: lead-ins and lifts see it', () => {
+  // a 20 mm square whose corners are 0.015 mm arcs, cut anticlockwise (a part: lead-ins go outside)
+  const q = 0.015;
+  const t = prog(['G0 X5 Y0', 'G1 Z-0.5 F200', `G1 X${20 - q} Y0 F1000`, `G3 X20 Y${q} I0 J${q}`, `G1 X20 Y${20 - q}`, `G3 X${20 - q} Y20 I${-q} J0`,
+    `G1 X${q} Y20`, `G3 X0 Y${20 - q} I0 J${-q}`, `G1 X0 Y${q}`, `G3 X${q} Y0 I${q} J0`, 'G1 X5 Y0']);
+  const res = DK.process(t, { offset: 2, leadInAngle: 60, leadInLength: 6, rampLength: 4, lineUp: false });
+  assert.strictEqual(res.stats.sharpened, 4);
+  assert.strictEqual(res.stats.tightArcs, 0);
+  assert.ok(res.stats.leadIns >= 3, 'lead-ins at the corners: ' + res.stats.leadIns);
+  const lifted = DK.process(t, { offset: 2, leadIn: false, liftAngle: 45, rampLength: 4, lineUp: false });
+  assert.ok(lifted.stats.lifted >= 3, 'lifted swivels: ' + lifted.stats.lifted);
+  const c = compare(t, lifted.text, 2);
+  assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
+});

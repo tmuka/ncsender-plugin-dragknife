@@ -1418,6 +1418,24 @@ var DragKnife = (function () {
     // Verticals between the last XY move and the trailing ones stay with the trail.
     if (pending.length) trail = pending.concat(trail);
 
+    // A tiny arc between two lines is a sharp corner rounded by a cutter's radius
+    // (QuickCut's 0.015 mm, for a 0.03 mm "bit"): the blade can't follow it, and as an
+    // arc it hides the corner from lead-ins and lifts. Meet the lines at a point instead.
+    var tinyR = Math.min(0.25 * scale, r / 4);
+    for (var ti = elems.length - 2; ti >= 1; ti--) {
+      var ta = elems[ti];
+      if (ta.kind !== 'arc' || dist(ta.from, ta.c) > tinyR) continue;
+      var tp = elems[ti - 1], tn = elems[ti + 1];
+      if (tp.kind !== 'line' || tn.kind !== 'line' || tn.preZ.length) continue;
+      var tu = tangentAt(tp, 1), tw = tangentAt(tn, 0), tx = cross(tu, tw);
+      if (Math.abs(tx) < 1e-9) continue;                                   // parallel: no corner
+      var tsp = cross(sub(tn.from, tp.to), tw) / tx, X = add(tp.to, mul(tu, tsp));
+      if (dist(X, ta.from) > 20 * tinyR || dist(X, ta.to) > 20 * tinyR) continue;
+      tp.to = X; tn.from = X; tn.preZ = ta.preZ;
+      elems.splice(ti, 1);
+      stats.tightArcs--; stats.sharpened = (stats.sharpened || 0) + 1;
+    }
+
     // A ramp-in that zigzags back and forth on one line and comes back to where it
     // started (QuickCut's, most CAM's) is dropped: the rewrite ramps in by itself,
     // and its reversals would otherwise be sharp corners.
