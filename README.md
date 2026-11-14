@@ -52,8 +52,10 @@ slit in the waste](docs/images/corners.svg)
   into the part are coloured. Corners already rounded in the program (a CAM tool radius on an outside cut) have
   nothing to lead into: cut on the line, or with a 0 bit diameter, to keep them sharp. A side view shows one lead-in
   corner in 3D, exaggerated.
-- **Thick material (optional):** at very sharp corners the blade rises partway while it swivels, then ramps back
-  down.
+- **Thick material, automatically:** deep in thick material a swivel at full depth tears the corner, since the blade's
+  whole buried edge sweeps round. So at sharp corners cut deeper than 1 mm, the blade rises partway (to a quarter of
+  the depth), swivels there, then ramps back down. **Lift** under *Lift at sharp corners* is **When deeper than** by
+  default (set the depth in **Deeper than**); **Always** lifts at every depth, **Off** never.
 
 ## Where Z0 is
 

@@ -75,7 +75,7 @@ test('inch programs use the offset in inches', () => {
 });
 
 test('lifted swivels rise during the turn and still cut the right shape', () => {
-  const res = DK.process(square, { ...cfg, liftAngle: 45 });
+  const res = DK.process(square, { ...cfg, liftMode: 'always', liftAngle: 45, liftFraction: 0.5 });
   assert.ok(res.stats.lifted >= 4);
   assert.match(res.text, /G3 X[-\d.]+ Y[-\d.]+ Z-0\.15 I/, 'a helical swivel up to half depth');
   const c = compare(square, res.text, R, { corners: squareCorners });
@@ -711,7 +711,7 @@ test('passes: the next pass ramps down while moving, no bounce (QuickCut straigh
   // a 20 mm square in two passes; between them QuickCut repeats the depth, then plunges
   const sqP = (z) => ['G1 X20 Y0 F1000', 'G1 X20 Y20', 'G1 X0 Y20', 'G1 X0 Y0'];
   const t = prog(['G0 X0 Y0', 'G0 Z2', 'G1 Z0 F60', 'G1 Z-2 F60', ...sqP(), 'G1 Z-2 F60', 'G1 Z-4 F60', ...sqP(), 'G0 Z5']);
-  const res = DK.process(t, { offset: 2, leadIn: false, lineUp: false, rampLength: 8 });
+  const res = DK.process(t, { offset: 2, leadIn: false, lineUp: false, rampLength: 8, liftMode: 'off' });
   assert.strictEqual(res.stats.passRamps, 1);
   const zs = res.text.split('\n').map(l => (l.match(/ Z(-?[\d.]+)/) || [])[1]).filter(Boolean).map(Number).filter(z => z < 0);
   for (let i = 1; i < zs.length; i++) assert.ok(zs[i] <= zs[i - 1] + 1e-9 || zs[i] === 0, 'never back up mid-cut: ' + zs.join(' '));
@@ -733,4 +733,24 @@ test('a tiny arc rounding a corner (QuickCut, 0.03 mm bit) is a sharp corner: le
   assert.ok(lifted.stats.lifted >= 3, 'lifted swivels: ' + lifted.stats.lifted);
   const c = compare(t, lifted.text, 2);
   assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
+});
+
+test('Lift: When deeper than (the default) lifts only deep corners; Always; Off; old settings', () => {
+  const sqAt = (z) => prog(['G0 X0 Y0', `G1 Z${z} F200`, 'G1 X20 Y0 F1000', 'G1 X20 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
+  const base = { offset: 2, leadIn: false, lineUp: false, rampLength: 4 };
+  assert.strictEqual(DK.DEFAULTS.liftMode, 'auto');
+  assert.strictEqual(DK.process(sqAt(-0.3), base).stats.lifted, 0, 'thin: plain swivels');
+  assert.ok(DK.process(sqAt(-3), base).stats.lifted >= 3, 'thick: lifted');
+  assert.ok(DK.process(sqAt(-0.3), { ...base, liftMode: 'always' }).stats.lifted >= 3, 'always');
+  assert.strictEqual(DK.process(sqAt(-3), { ...base, liftMode: 'off' }).stats.lifted, 0, 'off');
+  assert.strictEqual(DK.process(sqAt(-3), { ...base, liftDepth: 5 }).stats.lifted, 0, 'deeper than 5 mm only');
+  // inch program: Deeper than stays in mm (1 mm = 0.0394 in)
+  const inch = prog(['G0 X0 Y0', 'G1 Z-0.06 F8', 'G1 X1 Y0 F40', 'G1 X1 Y1', 'G1 X0 Y1', 'G1 X0 Y0'], 'G20');
+  assert.ok(DK.process(inch, { ...base, offset: 0.25, rampLength: 2 }).stats.lifted >= 3, '1.5 mm deep in inches lifts');
+  // old settings: an angle typed = lifting on everywhere; 0 (the old default) = Auto
+  assert.strictEqual(DK.readSettings({ liftAngle: 45 }).liftMode, 'always');
+  const was = DK.readSettings({ liftAngle: 0, liftFraction: 0.5 });
+  assert.deepStrictEqual([was.liftMode, was.liftAngle, was.liftFraction], ['auto', 30, 0.5]);
+  assert.strictEqual(DK.readSettings({ liftMode: 'bogus' }).liftMode, 'auto');
+  assert.ok(DK.KNIFE_KEYS.includes('liftMode') && DK.KNIFE_KEYS.includes('liftDepth'));
 });

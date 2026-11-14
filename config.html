@@ -302,9 +302,18 @@
   </section>
 <section class="dk-card">
     <h3 class="dk-card-title">Lift at sharp corners (thick material)</h3>
+    <p class="dk-hint">Deep in thick material, a swivel at full depth sweeps the blade&rsquo;s whole buried edge round and tears the corner. A lifted swivel rises partway, turns there, and goes back down.</p>
     <div class="dk-grid">
+      <div class="dk-field" style="grid-column: span 2"><label for="dk-liftMode">Lift</label>
+        <select class="dk-input" id="dk-liftMode" title="When swivels at sharp corners lift. When deeper than: only corners cut deeper than the depth beside it, so thin vinyl and paper keep plain swivels and thick material lifts.">
+          <option value="auto">When deeper than</option>
+          <option value="always">Always</option>
+          <option value="off">Off</option>
+        </select></div>
+      <div class="dk-field" id="dk-liftDepth-field"><label for="dk-liftDepth">Deeper than (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftDepth" type="text" data-unit="length" data-min="0" inputmode="decimal"
+        title="With Lift: When deeper than, corners cut deeper than this below the material top lift; shallower ones swivel at depth."></div>
       <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" inputmode="decimal"
-        title="Turns sharper than this rise partway during the swivel, so the blade turns with less drag, then ramp back to depth. 0 turns it off (best for thin vinyl and paper)."></div>
+        title="Turns sharper than this rise partway during the swivel, so the blade turns with less drag, then ramp back to depth."></div>
       <div class="dk-field"><label for="dk-liftFraction">Lift height (%)</label><input class="dk-input" id="dk-liftFraction" inputmode="decimal"
         title="How far toward the material top the blade rises during a lifted swivel, as a percentage of the depth."></div>
       <div class="dk-field"><label for="dk-liftRamp">Back to depth over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftRamp" type="text" data-unit="length" data-min="0" inputmode="decimal"
@@ -718,8 +727,10 @@ var DragKnife = (function () {
     surfaceZ: 0,         // program units; with zZero 'other': Z below this is in the material
     rampLength: 12,      // mm; cuts start at the surface and reach depth over this (about 2 offsets: the blade lines up)
     liftOut: 0.5,        // mm; closed shapes lift out over this, moving forward
-    liftAngle: 0,        // degrees; 0 = off. Turns sharper than this lift during the swivel
-    liftFraction: 0.5,   // how far up toward the surface the blade lifts (0..1)
+    liftMode: 'auto',    // lift at sharp corners: 'off', 'always', or 'auto' (only where the cut is deeper than liftDepth)
+    liftDepth: 1,        // mm; with liftMode 'auto', corners deeper than this lift (thin vinyl keeps plain swivels)
+    liftAngle: 30,       // degrees; turns sharper than this lift during the swivel
+    liftFraction: 0.25,  // how far up toward the surface the blade lifts (0..1)
     liftRamp: 1,         // mm; after a lifted swivel, back to depth over this
     stripSpindle: true,  // remove spindle starts (M3/M4) and speeds (S): a knife must never spin
     leadIn: true,        // lead into sharp corners (below) instead of swivelling
@@ -738,10 +749,11 @@ var DragKnife = (function () {
   };
   var PROTECT = ['auto', 'inside', 'outside', 'none'];
   var ZZERO = ['auto', 'top', 'bottom', 'other'];
+  var LIFTMODE = ['off', 'always', 'auto'];
   // What a saved knife holds: the blade and how it moves. Not the material top, the
   // spindle switch, the side to protect or the offset test's fields.
   var KNIFE_KEYS = ['offset', 'swivelAngle', 'rampLength', 'liftOut', 'startTurn', 'turnDepth', 'lineUp', 'leadIn', 'leadInAngle',
-    'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp'];
+    'leadInLength', 'hopHeight', 'liftMode', 'liftDepth', 'liftAngle', 'liftFraction', 'liftRamp'];
   // Saved knives, cleaned: at most 20, each with a name (1 to 40 plain characters,
   // unique) and its settings read like any others.
   function readKnives(list) {
@@ -867,6 +879,7 @@ var DragKnife = (function () {
       if (k === 'lastTest') { s[k] = raw && typeof raw[k] === 'string' && /^[\d.,]*$/.test(raw[k]) ? raw[k] : ''; continue; }
       if (k === 'zZero') { s[k] = raw && ZZERO.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       if (k === 'protect') { s[k] = raw && PROTECT.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
+      if (k === 'liftMode') { s[k] = raw && LIFTMODE.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       var n = raw && raw[k] !== undefined && raw[k] !== '' ? Number(raw[k]) : DEFAULTS[k];
       s[k] = isFinite(n) ? n : DEFAULTS[k];
     }
@@ -877,6 +890,14 @@ var DragKnife = (function () {
     // angle (how lead-ins were turned off before the switch, or a cleared field) gets
     // the default, so lead-ins switched on always happen.
     if (!(s.leadInAngle > 0)) s.leadInAngle = DEFAULTS.leadInAngle;
+    // Settings from before the Lift choice: a Lift above angle was typed (lifting on):
+    // keep lifting at every depth. Angle 0 was "off", the old default: now Auto.
+    if (raw && raw.liftMode === undefined && raw.liftAngle !== undefined) {
+      if (Number(raw.liftAngle) > 0) s.liftMode = 'always';
+      else s.liftAngle = DEFAULTS.liftAngle;
+    }
+    if (!(s.liftAngle > 0)) s.liftAngle = DEFAULTS.liftAngle;
+    if (!(s.liftDepth >= 0)) s.liftDepth = DEFAULTS.liftDepth;
     s.liftFraction = Math.max(0, Math.min(1, s.liftFraction));
     s.turnDepth = Math.max(0, Math.min(1, s.turnDepth));
     if (!(s.thickness >= 0)) s.thickness = 0;
@@ -1258,7 +1279,8 @@ var DragKnife = (function () {
     var header = headerLines([
       'processed: program in ' + u,
       'offset ' + fmt(cfg.offset) + 'mm', 'swivel above ' + fmt(cfg.swivelAngle) + 'deg', 'ramp ' + fmt(cfg.rampLength) + 'mm',
-      'lift ' + (cfg.liftAngle > 0 ? 'above ' + fmt(cfg.liftAngle) + 'deg' : 'off'),
+      'lift ' + (cfg.liftMode === 'off' ? 'off' : 'above ' + fmt(cfg.liftAngle) + 'deg' +
+        (cfg.liftMode === 'auto' ? ' past ' + fmt(cfg.liftDepth) + 'mm deep' : '')),
       'lead-in ' + (cfg.leadInAngle > 0 ? 'above ' + fmt(cfg.leadInAngle) + 'deg' : 'off')
     ].concat(cfg.leadInAngle > 0 ? [fmt(cfg.leadInLength) + 'mm', 'protect ' + cfg.protect] : [],
       ['spindle ' + (cfg.stripSpindle ? 'removed' : 'kept')],
@@ -1542,12 +1564,13 @@ var DragKnife = (function () {
       }
     }
     // Lifted swivels at sharp corners (back to front so indices hold).
-    if (cfg.liftAngle > 0) {
+    if (cfg.liftMode !== 'off' && cfg.liftAngle > 0) {
+      var liftPast = cfg.liftMode === 'auto' ? cfg.liftDepth * scale : 0;
       for (var j = elems.length - 1; j > 0; j--) {
         var ang = Math.abs(turn(tangentAt(elems[j - 1], 1), tangentAt(elems[j], 0))) * 180 / Math.PI;
         if (ang > cfg.liftAngle && cornerKind(elems[j - 1], elems[j]) === 'swivel') {
           var zEnd = elems[j - 1].z1;
-          if (zEnd < surface) {
+          if (zEnd < surface - liftPast - 1e-9) {
             stats.lifted++;
             applyRamp(elems, j, zEnd + (surface - zEnd) * cfg.liftFraction, cfg.liftRamp * scale);
           }
@@ -1882,7 +1905,7 @@ var DragKnife = (function () {
 if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
 /* END lib/drag-knife.cjs */
 
-  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'thickness', 'rampLength', 'liftOut', 'turnDepth', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftAngle', 'liftFraction', 'liftRamp',
+  var FIELDS = ['offset', 'swivelAngle', 'surfaceZ', 'thickness', 'rampLength', 'liftOut', 'turnDepth', 'leadInAngle', 'leadInLength', 'hopHeight', 'liftDepth', 'liftAngle', 'liftFraction', 'liftRamp',
     'testStep', 'testCount', 'testSize', 'testDepth', 'testFeed'];
   var AUTO_EMPTY = { testStep: 1, testSize: 1 };   // empty (or 0) = worked out from the offsets
   // liftFraction is shown as a percentage.
@@ -1970,6 +1993,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     leadIn.checked = !!cfg.leadIn; leadInShown();
     startTurn.checked = !!cfg.startTurn; startTurnShown();
     lineUpBox.checked = !!cfg.lineUp;
+    liftModeShown();
   }
   blade.addEventListener('change', function() {
     $('dk-knife-said').textContent = '';
@@ -2040,6 +2064,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   saveFiles.checked = !!cfg.saveToFileManager;
   saveFiles.addEventListener('change', function() { cfg.saveToFileManager = saveFiles.checked; save(); });
   // Where Z0 is, and the depth of cut that gives with the loaded program.
+  // Lift at sharp corners: Off, Always, or When deeper than (the default).
+  var liftMode = $('dk-liftMode');
+  function liftModeShown() {
+    liftMode.value = cfg.liftMode;
+    $('dk-liftDepth-field').hidden = cfg.liftMode !== 'auto';
+    ['dk-liftAngle', 'dk-liftFraction', 'dk-liftRamp'].forEach(function(id) { $(id).disabled = cfg.liftMode === 'off'; });
+  }
+  liftModeShown();
+  liftMode.addEventListener('change', function() { cfg.liftMode = liftMode.value; liftModeShown(); save(); refresh(); });
   var zZero = $('dk-zZero');
   zZero.value = cfg.zZero;
   zZero.addEventListener('change', function() { cfg.zZero = zZero.value; save(); refresh(); });
@@ -3068,7 +3101,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
       '<li><b>Turn the blade in place before each cut:</b> the blade keeps pointing the way it last cut, even in the air. Before the next cut (and where it comes down for a lead-in) the tip lands exactly on the start, the blade turns there at <i>Turn at</i> (25 % of the depth), then ramps in lined up. The first cut of a program can’t know which way the blade points: that’s the next setting.</li>' +
       '<li><b>Line up the blade before the first cut:</b> before the program’s first cut, the blade drags a short shallow line (5 offsets) in the waste beside the start, so it’s lined up wherever the last job left it; the mark from lining up lands in the waste, not on your part. Only where there’s clear room (outside a part, inside a hole, an offset clear of every cut, not past X0 or Y0); otherwise the first cut ramps in as before.</li>' +
       '<li><b>Lift out over:</b> closed shapes rise to the top over this, moving along the shape over ground already cut.</li>' +
-      '<li><b>Lift at sharp corners:</b> for thick material, the blade rises partway while it swivels.</li>' +
+      '<li><b>Lift at sharp corners:</b> deep in thick material a swivel at full depth tears the corner, so the blade rises partway while it swivels. <i>Lift</i>: <i>When deeper than</i> (the default: only corners deeper than <i>Deeper than</i>, 1 mm, so vinyl keeps plain swivels), <i>Always</i> or <i>Off</i>.</li>' +
       '<li><b>Save to File Manager:</b> keeps each result, and the original when it isn’t saved already, so it can be processed again later.</li></ul>' +
       '<h4>Tips</h4><ul>' +
       '<li>Make the program for the line you want cut: in QuickCut cut <i>on the line</i>, or set the bit diameter to 0. An outside cut with a router bit rounds the points before Drag Knife sees them.</li>' +
