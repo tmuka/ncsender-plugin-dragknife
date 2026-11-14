@@ -750,7 +750,61 @@ test('Lift: When deeper than (the default) lifts only deep corners; Always; Off;
   // old settings: an angle typed = lifting on everywhere; 0 (the old default) = Auto
   assert.strictEqual(DK.readSettings({ liftAngle: 45 }).liftMode, 'always');
   const was = DK.readSettings({ liftAngle: 0, liftFraction: 0.5 });
-  assert.deepStrictEqual([was.liftMode, was.liftAngle, was.liftFraction], ['auto', 30, 0.5]);
+  assert.deepStrictEqual([was.liftMode, was.liftAngle, was.liftFraction], ['auto', 30, 0.75]);
+  assert.strictEqual(DK.readSettings({ liftAngle: 40, liftFraction: 0.5 }).liftFraction, 0.5, 'chosen with lifting on: kept');
+  assert.strictEqual(DK.readSettings({ liftMode: 'auto', liftFraction: 0.25 }).liftFraction, 0.75, "0.1.5's default");
+  assert.strictEqual(DK.readSettings({ liftMode: 'auto', liftFraction: 0.9 }).liftFraction, 0.9);
   assert.strictEqual(DK.readSettings({ liftMode: 'bogus' }).liftMode, 'auto');
   assert.ok(DK.KNIFE_KEYS.includes('liftMode') && DK.KNIFE_KEYS.includes('liftDepth'));
+});
+
+// ---- from the independent review (v0.1.5) ----
+test('review: an open path and a tab keep their plunges; only a closed lap ramps', () => {
+  const { distToPath } = require('./sim.cjs');
+  const open = prog(['G0 X10 Y10', 'G1 Z-1 F60', 'G1 X60 Y10 F600', 'G1 Z-2 F60', 'G1 X10 Y10']);
+  const res = DK.process(open, { offset: 2, leadIn: false, lineUp: false, liftMode: 'off' });
+  assert.ok(!res.stats.passRamps, 'no pass ramp on an open path');
+  const deep = drag(run(res.text, 0.05), 2).filter(t => t.z <= -2 + 1e-6);
+  for (const x of [15, 30, 59]) assert.ok(deep.some(t => Math.abs(t.x - x) < 0.3), 'cut to -2 at X' + x);
+  // a tab: up to -0.5 for 10 mm, then straight back down to -2
+  const tab = prog(['G0 X10 Y10', 'G1 Z-2 F60', 'G1 X60 Y10 F600', 'G1 X60 Y60', 'G1 Z-0.5', 'G1 X60 Y70', 'G1 Z-2', 'G1 X60 Y110', 'G1 X10 Y110', 'G1 X10 Y10']);
+  const t2 = DK.process(tab, { offset: 2, leadIn: false, lineUp: false, liftMode: 'off' });
+  const shallow = run(t2.text, 0.05).filter(a => a.z > -2 + 1e-6 && a.z < 0 && Math.abs(a.x - 60) < 1e-6 && a.y > 61 && a.y < 105);
+  assert.ok(shallow.every(a => a.y < 72.5), 'back to depth right after the tab, not ramped: ' + Math.max(...shallow.map(a => a.y)));
+});
+
+test('review: lines between the touch-down and the cut stay (M8, comments, dwells)', () => {
+  const t = prog(['G0 X0 Y0', 'G1 Z0 F300', 'M8', '(pass 1)', 'G4 P0.5', 'G1 X20 Y0 Z-1 F600', 'G1 X20 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
+  const out = DK.process(t, { offset: 2, leadIn: false, lineUp: false }).text;
+  assert.match(out, /^M8$/m); assert.match(out, /^\(pass 1\)$/m); assert.match(out, /^G4 P0\.5$/m);
+  assert.doesNotMatch(out, /^G1 Z0 F300$/m, 'the touch-down itself is left out');
+});
+
+test('review: a tiny corner arc where a closed shape starts or ends is sharpened too', () => {
+  const q = 0.015;
+  // QuickCut style: starts on a corner's arc, ends on the line into it
+  const t = prog(['G0 X20 Y' + (20 - q), 'G1 Z-0.5 F200', `G3 X${20 - q} Y20 I${-q} J0 F1000`, `G1 X${q} Y20`, `G3 X0 Y${20 - q} I0 J${-q}`,
+    `G1 X0 Y${q}`, `G3 X${q} Y0 I${q} J0`, `G1 X${20 - q} Y0`, `G3 X20 Y${q} I0 J${q}`, `G1 X20 Y${20 - q}`]);
+  const res = DK.process(t, { offset: 2, leadIn: false, liftMode: 'always', lineUp: false, rampLength: 4 });
+  assert.strictEqual(res.stats.sharpened, 4);
+  assert.ok(res.stats.lifted >= 3, 'lifted: ' + res.stats.lifted);
+});
+
+test('review: a small shape in passes ramps within each lap, no step down', () => {
+  const sqP = () => ['G1 X12 Y10 F600', 'G1 X12 Y12', 'G1 X10 Y12', 'G1 X10 Y10', 'G1 X11 Y10'];
+  const t = prog(['G0 X11 Y10', 'G1 Z0 F300', 'G1 Z-1 F60', ...sqP(), 'G1 Z-2 F60', ...sqP(), 'G1 Z-3 F60', ...sqP()]);
+  const res = DK.process(t, { offset: 1, leadIn: false, lineUp: false, liftMode: 'off', rampLength: 12 });
+  const a = run(res.text, 0.01);
+  for (let i = 1; i < a.length; i++) {
+    const still = Math.hypot(a[i].x - a[i - 1].x, a[i].y - a[i - 1].y) < 1e-9;
+    if (still && a[i].z < -1e-9 && a[i - 1].z < -1e-9) assert.fail('straight up or down mid-cut at ' + a[i].x + ',' + a[i].y + ' z ' + a[i].z);
+  }
+});
+
+test('review: with no ramp, a corner where a pass starts still lifts', () => {
+  const sqP = () => ['G1 X30 Y10 F600', 'G1 X30 Y30', 'G1 X10 Y30', 'G1 X10 Y10'];
+  const t = prog(['G0 X10 Y10', 'G1 Z-1 F60', ...sqP(), 'G1 Z-2 F60', ...sqP(), 'G1 Z-3 F60', ...sqP()]);
+  const res = DK.process(t, { offset: 2, leadIn: false, lineUp: false, liftMode: 'always', rampLength: 0, liftFraction: 0.5 });
+  assert.ok(!/^G[23] X12 Y10 I0 J2$/m.test(res.text), 'no full-depth swivel at a pass start');
+  assert.ok(res.stats.lifted >= 11, 'every corner lifts: ' + res.stats.lifted);
 });

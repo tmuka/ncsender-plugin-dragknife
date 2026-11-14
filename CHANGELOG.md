@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- From an independent review of 0.1.4 and 0.1.5:
+  - **Pass ramps only where a closed shape starts a new lap.** 0.1.5 ramped every straight-down move in a cut. An open path's next pass was then left shallow at its start, and a tab's end ramped back down over 12 mm, making the tab about twice as long. Those plunge again, as the program wrote them.
+  - On a small shape, each pass's ramp fits within one lap (at most 80 % of it), and so does the first ramp. Before, a ramp longer than a lap ran into the next pass and left a short straight step down.
+  - Leaving out the program's touch-down kept only the touch-down: anything between it and the cut (M8, a comment, a dwell, a pause) was dropped too.
+  - A tiny corner arc where a closed shape starts or ends (QuickCut starts polygons on one) is a sharp corner too, so that corner gets its lead-in or lift like the rest.
+  - With **Ramp in over** at 0, a corner where a new pass starts lifted like the others only in name: it swivelled at full depth.
+  - Saved **Lift height** values that were only ever the default (0.1.4 and earlier with lifting off: 50 %; 0.1.5: 25 %) move to the new 75 %.
+  - The depth line under **Z0 is** turned yellow with no reason when the cut went deeper than **Material thickness**; it now says so.
+- **Lift height** defaults to 75 % (the blade rises three quarters of the way to the top, so it swivels at a quarter of the depth); 0.1.5's 25 % left it swivelling three quarters deep. Its tip says how it counts.
+
 ## 0.1.5: Thick material and multi-pass cuts
 
 - **Lifted swivels by depth, on by default.** *Lift at sharp corners* has a **Lift** choice: **When deeper than** (the default) lifts the swivel only at corners cut deeper than **Deeper than** (1 mm), so thin vinyl keeps plain swivels and thick material doesn't tear at the corners; **Always**; **Off**. The defaults are now **Lift above** 30° and **Lift height** 25 %. Settings with a **Lift above** angle typed before keep lifting at every depth (**Always**).
