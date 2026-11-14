@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.6: Review fixes and a higher lift
 
 - From an independent review of 0.1.4 and 0.1.5:
   - **Pass ramps only where a closed shape starts a new lap.** 0.1.5 ramped every straight-down move in a cut. An open path's next pass was then left shallow at its start, and a tab's end ramped back down over 12 mm, making the tab about twice as long. Those plunge again, as the program wrote them.
