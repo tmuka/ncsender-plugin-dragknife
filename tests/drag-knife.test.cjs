@@ -706,3 +706,16 @@ test('travels added before a cut clear a blade that still touches 1 mm up (sprin
   // only the line-up itself is off the square, whether the blade clears at Z0 or touches up to Z1.2
   assert.ok(stray(1.2) < stray(0) + 0.5, 'touching up to Z1.2 adds ' + (stray(1.2) - stray(0)).toFixed(1) + ' mm of stray cut');
 });
+
+test('passes: the next pass ramps down while moving, no bounce (QuickCut straight-down entry)', () => {
+  // a 20 mm square in two passes; between them QuickCut repeats the depth, then plunges
+  const sqP = (z) => ['G1 X20 Y0 F1000', 'G1 X20 Y20', 'G1 X0 Y20', 'G1 X0 Y0'];
+  const t = prog(['G0 X0 Y0', 'G0 Z2', 'G1 Z0 F60', 'G1 Z-2 F60', ...sqP(), 'G1 Z-2 F60', 'G1 Z-4 F60', ...sqP(), 'G0 Z5']);
+  const res = DK.process(t, { offset: 2, leadIn: false, lineUp: false, rampLength: 8 });
+  assert.strictEqual(res.stats.passRamps, 1);
+  const zs = res.text.split('\n').map(l => (l.match(/ Z(-?[\d.]+)/) || [])[1]).filter(Boolean).map(Number).filter(z => z < 0);
+  for (let i = 1; i < zs.length; i++) assert.ok(zs[i] <= zs[i - 1] + 1e-9 || zs[i] === 0, 'never back up mid-cut: ' + zs.join(' '));
+  assert.doesNotMatch(res.text, /^G1 Z-4/m, 'no straight plunge to the second pass');
+  const c = compare(t, res.text, 2);
+  assert.ok(c.maxDev < TOL, 'deviation ' + c.maxDev);
+});

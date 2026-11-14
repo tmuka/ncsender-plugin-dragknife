@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Passes ramp in.** A program that goes deeper in passes, straight down between them (QuickCut's drag-knife entry), now ramps down to each new pass over **Ramp in over** while moving on, like the first pass, instead of stopping for a slow plunge. Before, the knife also bounced there: down at full feed, back up, then down again slowly.
 - **Before a cut, nothing touches down early.** A program that comes down to Z0 at the start (QuickCut does) has that touch-down left out: Drag Knife comes down itself, where the cut really starts (after the line-up, or where the blade turns in place). Where the material sits above Z0, that touch-down already cut, before the blade was lined up.
 - Moves Drag Knife adds before a cut (to and from the line-up, lifting off) travel as high as the program's own travels, not **Hop height**, and the blade comes down quickly only to **Hop height**, then at the plunge feed. A spring-loaded holder zeroed pressed down, or material above Z0, still touched at 1 mm up and cut a loop above the star's top point. **Hop height**'s tip says it must clear the material (3 mm leaves room for material that isn't flat).
 
