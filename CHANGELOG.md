@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5: Thick material and multi-pass cuts
 
 - **Lifted swivels by depth, on by default.** *Lift at sharp corners* has a **Lift** choice: **When deeper than** (the default) lifts the swivel only at corners cut deeper than **Deeper than** (1 mm), so thin vinyl keeps plain swivels and thick material doesn't tear at the corners; **Always**; **Off**. The defaults are now **Lift above** 30° and **Lift height** 25 %. Settings with a **Lift above** angle typed before keep lifting at every depth (**Always**).
 - **QuickCut's corners are corners again.** QuickCut rounds each corner with an arc of half its bit diameter (0.015 mm for a 0.03 mm drag knife "bit"). Drag Knife took that as a smooth curve, so **Lead into sharp corners** and **Lift at sharp corners** never applied to QuickCut shapes and every corner swivelled at full depth, tearing thick material. Arcs that small between two lines now count as the sharp corner they stand for.
