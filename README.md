@@ -33,7 +33,7 @@ slit in the waste](docs/images/corners.svg)
   the shape (*Lift out over*, never past the rest of the lap).
 - **No spindle:** spindle starts (M3/M4) and speeds (S) are removed by default; each line is left commented out and marked
   "removed by Drag Knife". M5 stays.
-- **Lead-in corners (on by default; a switch turns them off):** at corners sharper than *Lead in above* (60°), the blade hops up, comes down behind the
+- **Lead-in corners (off by default; *Lead into sharp corners* turns them on):** at corners sharper than *Lead in above* (60°), the blade hops up, comes down behind the
   corner on the next line extended, and cuts into the corner along it, so it's lined up before the cut begins. That
   leaves a short tapered slit past the corner; *Keep lead-ins off* chooses the side it may go (the inside of shapes
   when cutting out parts, the outside when cutting holes). Corners on the protected side swivel instead.

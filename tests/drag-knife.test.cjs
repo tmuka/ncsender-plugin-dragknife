@@ -185,7 +185,7 @@ test('spindle starts and speeds are removed; M5 and M30 stay', () => {
 });
 
 test('lead-in corners: hop, lead in along the next line, blade lined up at the corner', () => {
-  const set = { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, protect: 'inside' };
+  const set = { leadIn: true, offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, protect: 'inside' };
   const res = DK.process(square, set);
   // the square goes anticlockwise: every corner is convex, every extension is outside
   assert.strictEqual(res.stats.leadIns, 4, 'lead-ins ' + res.stats.leadIns);
@@ -205,36 +205,36 @@ test('lead-in corners: hop, lead in along the next line, blade lined up at the c
 test('lead-in corners respect the protected side', () => {
   // anticlockwise L-shape with one concave corner at (10,10)
   const ell = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X20 Y0 F1000', 'G1 X20 Y10', 'G1 X10 Y10', 'G1 X10 Y20', 'G1 X0 Y20', 'G1 X0 Y0']);
-  const base = { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
-  const inside = DK.process(ell, { ...base, protect: 'inside' }).stats;
-  const outside = DK.process(ell, { ...base, protect: 'outside' }).stats;
-  const none = DK.process(ell, { ...base, protect: 'none' }).stats;
+  const base = { leadIn: true, offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
+  const inside = DK.process(ell, { leadIn: true, ...base, protect: 'inside' }).stats;
+  const outside = DK.process(ell, { leadIn: true, ...base, protect: 'outside' }).stats;
+  const none = DK.process(ell, { leadIn: true, ...base, protect: 'none' }).stats;
   // corners met: (20,0) (20,10) (10,10)concave (10,20) (0,20) and the close at (0,0)
   assert.deepStrictEqual([inside.leadIns, inside.swivels], [5, 1], 'protect inside: the concave corner swivels');
   assert.deepStrictEqual([outside.leadIns, outside.swivels], [1, 5], 'protect outside: only the concave corner leads in');
   assert.deepStrictEqual([none.leadIns, none.swivels], [6, 0]);
   // the same shape clockwise: the concave corner is a left turn now, same answer
   const cw = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X0 Y20 F1000', 'G1 X10 Y20', 'G1 X10 Y10', 'G1 X20 Y10', 'G1 X20 Y0', 'G1 X0 Y0']);
-  assert.strictEqual(DK.process(cw, { ...base, protect: 'inside' }).stats.leadIns, 5);
+  assert.strictEqual(DK.process(cw, { leadIn: true, ...base, protect: 'inside' }).stats.leadIns, 5);
   // open paths: no inside or outside, so they swivel unless nothing is protected
   const zig = prog(['G0 X0 Y0', 'G1 Z-0.3 F200', 'G1 X10 Y2 F1000', 'G1 X0 Y4', 'G1 X10 Y6']);
-  assert.strictEqual(DK.process(zig, { ...base, protect: 'inside' }).stats.leadIns, 0);
-  assert.strictEqual(DK.process(zig, { ...base, protect: 'none' }).stats.leadIns, 2);
+  assert.strictEqual(DK.process(zig, { leadIn: true, ...base, protect: 'inside' }).stats.leadIns, 0);
+  assert.strictEqual(DK.process(zig, { leadIn: true, ...base, protect: 'none' }).stats.leadIns, 2);
   // lead-in corners don't also lift
-  const both = DK.process(square, { ...base, protect: 'inside', liftAngle: 45 }).stats;
+  const both = DK.process(square, { leadIn: true, ...base, protect: 'inside', liftAngle: 45 }).stats;
   assert.deepStrictEqual([both.leadIns, both.lifted], [4, 0]);
 });
 
 test('lead-ins in inch programs scale the length and hop', () => {
   const sqIn = prog(['G0 X0 Y0', 'G1 Z-0.01 F8', 'G1 X1 Y0 F40', 'G1 X1 Y1', 'G1 X0 Y1', 'G1 X0 Y0'], 'G20');
-  const res = DK.process(sqIn, { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1 });
+  const res = DK.process(sqIn, { leadIn: true, offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1 });
   assert.strictEqual(res.stats.leadIns, 4);
   assert.match(res.text, /^G0 Z0\.0394$/m);
   // first lead-in starts 1.5 mm behind (1,0) along +Y: Y = -1.5 / 25.4. The blade still points
   // +X (the side just cut), so the axis lands 0.25 mm on along X and turns round that point.
   assert.match(res.text, /^G0 X1\.0098 Y-0\.0591$/m);
   // without the turn: the axis lands on the lead-in line, offset ahead: Y = (-1.5 + 0.25) / 25.4
-  const plain = DK.process(sqIn, { offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, startTurn: false });
+  const plain = DK.process(sqIn, { leadIn: true, offset: R, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, startTurn: false });
   assert.match(plain.text, /^G0 X1 Y-0\.0492$/m);
 });
 
@@ -247,7 +247,7 @@ function sq(x0, y0, x1, y1, ccw = true) {
 const leadsPerCut = (text) => text.split('(dk: cut').slice(1).map(c => (c.match(/^G0 Z1\nG0 X/gm) || []).length);
 
 test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
-  const base = { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
+  const base = { leadIn: true, offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2 };
   assert.strictEqual(DK.DEFAULTS.protect, 'auto');
   for (const holeCcw of [true, false]) {
     const t = prog([...sq(0, 0, 40, 40), ...sq(10, 10, 30, 30, holeCcw), ...sq(15, 15, 25, 25)]);
@@ -266,12 +266,12 @@ test('auto: parts lead in outside, holes keep lead-ins out of the part', () => {
   assert.deepStrictEqual(leadsPerCut(twice.text), [4, 4]);
 });
 
-test('lead-ins are on by default; the switch turns them off; old saved settings (angle 0) get the default', () => {
-  const on = DK.process(square, { offset: R, leadInLength: 1.5, rampLength: 2 }).stats;
-  assert.ok(on.leadIns > 0, 'default lead-ins: ' + on.leadIns);
-  assert.strictEqual(DK.process(square, { offset: R, leadIn: false }).stats.leadIns, 0);
+test('lead-ins are off by default; the switch turns them on; old saved settings (angle 0) get the default angle', () => {
+  assert.strictEqual(DK.process(square, { offset: R, leadInLength: 1.5, rampLength: 2 }).stats.leadIns, 0, 'default: every corner swivels');
+  assert.ok(DK.process(square, { offset: R, leadIn: true, leadInLength: 1.5, rampLength: 2 }).stats.leadIns > 0);
+  assert.strictEqual(DK.readSettings({ offset: 0.25, leadIn: true }).leadIn, true, 'a saved switch is kept');
   const old = DK.readSettings({ offset: 0.25, leadInAngle: 0, leadInLength: 11.5 });
-  assert.strictEqual(old.leadIn, true); assert.strictEqual(old.leadInAngle, 60); assert.strictEqual(old.leadInLength, 11.5);
+  assert.strictEqual(old.leadIn, false); assert.strictEqual(old.leadInAngle, 60); assert.strictEqual(old.leadInLength, 11.5);
   assert.strictEqual(DK.readSettings({ leadIn: true, leadInAngle: 0 }).leadInAngle, 60, 'switched on with a 0 angle: the default');
   assert.strictEqual(DK.process(square, { offset: R, leadIn: true, leadInAngle: 0 }).stats.leadIns > 0, true);
   assert.strictEqual(DK.process(square, { offset: R, leadIn: false, leadInAngle: 0 }).stats.leadIns, 0);
@@ -280,7 +280,7 @@ test('lead-ins are on by default; the switch turns them off; old saved settings 
 test('a back-and-forth ramp-in (QuickCut style) is dropped, not turned into lead-ins', () => {
   // down to Z0, zigzag 0.3 mm forward and back to depth, then a square
   const t = prog(['G0 X0 Y0', 'G1 Z0 F100', 'G1 X0.3 Y0 Z-0.15 F500', 'G1 X0 Y0 Z-0.3', 'G1 X10 Y0', 'G1 X10 Y10', 'G1 X0 Y10', 'G1 X0 Y0']);
-  const res = DK.process(t, { offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2, protect: 'none' });
+  const res = DK.process(t, { leadIn: true, offset: R, leadInAngle: 60, leadInLength: 1.5, rampLength: 2, protect: 'none' });
   assert.strictEqual(res.stats.rampsDropped, 1);
   assert.strictEqual(res.stats.leadIns, 4, 'only the square\'s corners lead in (the closing one too)');
   // without lead-ins, the tip follows the wanted path, ramp included
@@ -310,7 +310,7 @@ test('analyze says when auto can\'t decide, and what to choose', () => {
   assert.strictEqual(mixed.problems.length, 1);
   assert.strictEqual(mixed.suggest, null);
   // process() carries the same problems into its stats
-  assert.strictEqual(DK.process(prog([...sq(0, 0, 20, 20), ...sq(10, 10, 40, 40)]), { offset: R, leadInAngle: 60 }).stats.autoProblems.length, 1);
+  assert.strictEqual(DK.process(prog([...sq(0, 0, 20, 20), ...sq(10, 10, 40, 40)]), { leadIn: true, offset: R, leadInAngle: 60 }).stats.autoProblems.length, 1);
 });
 
 test('a big program runs quickly', () => {
@@ -405,7 +405,7 @@ test('results name their source', () => {
 
 test('defaults suit a large-format CNC drag knife: 6 mm offset, lead-in 18 mm, ramp 12 mm', () => {
   const d = DK.readSettings({});
-  assert.deepStrictEqual([d.offset, d.leadInLength, d.rampLength, d.leadIn, d.leadInAngle], [6, 18, 12, true, 60]);
+  assert.deepStrictEqual([d.offset, d.leadInLength, d.rampLength, d.leadIn, d.leadInAngle], [6, 18, 12, false, 60]);
 });
 
 test('a closed shape entered by a ramp along its own path (ncCAM) is closed, not open', () => {
@@ -559,7 +559,7 @@ test('the next cut turns the blade in place at its start: the tip lands on it an
 });
 
 test('a lead-in after a hop turns in place too, so even a short lead-in lines the blade up', () => {
-  const set = { offset: 6, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, protect: 'none', rampLength: 2, liftOut: 0 };
+  const set = { leadIn: true, offset: 6, leadInAngle: 60, leadInLength: 1.5, hopHeight: 1, protect: 'none', rampLength: 2, liftOut: 0 };
   const big = prog(['G0 X0 Y0', 'G1 Z-0.5 F200', 'G1 X60 Y0 F1000', 'G1 X60 Y60', 'G1 X0 Y60', 'G1 X0 Y0']);
   const corners = [{ x: 60, y: 0, dir: { x: 0, y: 1 } }, { x: 60, y: 60, dir: { x: -1, y: 0 } }, { x: 0, y: 60, dir: { x: 0, y: -1 } }];
   const zones = corners.map(c => ({ a: { x: c.x - c.dir.x * 1.5, y: c.y - c.dir.y * 1.5 }, b: c }));
@@ -725,7 +725,7 @@ test('a tiny arc rounding a corner (QuickCut, 0.03 mm bit) is a sharp corner: le
   const q = 0.015;
   const t = prog(['G0 X5 Y0', 'G1 Z-0.5 F200', `G1 X${20 - q} Y0 F1000`, `G3 X20 Y${q} I0 J${q}`, `G1 X20 Y${20 - q}`, `G3 X${20 - q} Y20 I${-q} J0`,
     `G1 X${q} Y20`, `G3 X0 Y${20 - q} I0 J${-q}`, `G1 X0 Y${q}`, `G3 X${q} Y0 I${q} J0`, 'G1 X5 Y0']);
-  const res = DK.process(t, { offset: 2, leadInAngle: 60, leadInLength: 6, rampLength: 4, lineUp: false });
+  const res = DK.process(t, { leadIn: true, offset: 2, leadInAngle: 60, leadInLength: 6, rampLength: 4, lineUp: false });
   assert.strictEqual(res.stats.sharpened, 4);
   assert.strictEqual(res.stats.tightArcs, 0);
   assert.ok(res.stats.leadIns >= 3, 'lead-ins at the corners: ' + res.stats.leadIns);
