@@ -9,18 +9,20 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', 'commands.js'), 'utf8');
 const KNIFE = { id: 41, toolId: 791, name: 'Drag Knife', type: 'drag-knife' };
 const MILL = { id: 3, toolId: 3, name: '1/4 Endmill', type: 'flat' };
 
-// A sandbox like ncSender's: a script with a pluginContext global. answer: the dialog's reply.
-function hook({ tools = [KNIFE, MILL], answer = { action: 'convert' } } = {}) {
-  const asked = [], notices = [];
+// A sandbox like ncSender's: a script with a pluginContext global. answer: the button's
+// value ('convert', 'skip', or null for none). gate: false for an ncSender without askGate.
+function hook({ tools = [KNIFE, MILL], answer = 'convert', gate = true } = {}) {
+  const asked = [], gates = [], notices = [];
   const pluginContext = {
     log() {}, getTools: () => tools,
-    showDialog: (title, html) => { asked.push(html); return answer; },
+    showDialog: (title, html) => { asked.push(html); return answer === null ? null : { action: answer }; },
     showNotice: (title, msg) => notices.push(msg)
   };
+  if (gate) pluginContext.askGate = (o) => { gates.push(o); asked.push(o.message); return answer; };
   const box = { pluginContext };
   vm.createContext(box);
   vm.runInContext(SRC, box);
-  return { run: (text, settings) => box.onGcodeProgramLoad(text, { filename: 'star.nc', sourcePath: null }, settings), asked, notices };
+  return { run: (text, settings) => box.onGcodeProgramLoad(text, { filename: 'star.nc', sourcePath: null }, settings), asked, gates, notices };
 }
 
 const square = (head) => [head, 'G21 G90', 'G0 Z5', 'G0 X0 Y0', 'G1 Z-1 F300',
@@ -55,8 +57,27 @@ test('load hook: QuickCut\'s drag knife note is enough', () => {
 });
 
 test('load hook: Load as it is, or closing the question, leaves it alone', () => {
-  assert.equal(hook({ answer: { action: 'skip' } }).run(BY_TOOL, S), BY_TOOL);
+  assert.equal(hook({ answer: 'skip' }).run(BY_TOOL, S), BY_TOOL);
   assert.equal(hook({ answer: null }).run(BY_TOOL, S), BY_TOOL);
+});
+
+test('load hook: asks with ncSender\'s own prompt, Convert as the default', () => {
+  const h = hook();
+  h.run(BY_TOOL, S);
+  const g = h.gates[0];
+  assert.equal(h.gates.length, 1);
+  assert.equal(g.messageHtml, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(g.buttons.map((b) => [b.value, b.label, b.style, !!b.isDefault]))),
+    [['skip', 'Load as it is', 'secondary', false], ['convert', 'Convert', 'primary', true]]);
+  assert.match(g.message, /<b>star\.nc<\/b>/);
+  assert.match(g.message, /blade offset of 4\.56 mm/);
+});
+
+test('load hook: an ncSender without askGate gets the HTML dialog', () => {
+  const h = hook({ gate: false });
+  assert.match(h.run(BY_TOOL, S), /dragknife processed/);
+  assert.match(h.asked[0], /dkq-go/);
+  assert.equal(hook({ gate: false, answer: 'skip' }).run(BY_TOOL, S), BY_TOOL);
 });
 
 test('load hook: Convert it converts without asking; Do nothing does nothing', () => {

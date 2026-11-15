@@ -1309,13 +1309,34 @@ function dkTools() {
   } catch (e) { return []; }
 }
 
-// The question, as a dialog with two buttons. -> true to convert
+// The question. -> true to convert. ncSender's own prompt (askGate) where it has
+// one, the same as its other confirmations; an HTML dialog on older versions.
 function dkAsk(file, found, cfg) {
-  if (typeof pluginContext === 'undefined' || typeof pluginContext.showDialog !== 'function') return false;
+  if (typeof pluginContext === 'undefined') return false;
   var why = found.why === 'quickcut'
     ? 'QuickCut made it for a drag knife.'
     : 'Its tool' + (found.t !== null ? ' (T' + found.t + (found.name ? ', ' + found.name : '') + ')' : '') +
       ' is a drag knife in the Tool Library.';
+  if (typeof pluginContext.askGate === 'function') {
+    var v = pluginContext.askGate({
+      title: 'Convert for the drag knife?',
+      message:
+        '<b>' + dkEsc(file || 'This program') + '</b> looks like a drag knife program. ' + dkEsc(why) +
+        '<br><br>Convert it for your blade offset of ' + dkEsc(String(cfg.offset)) + ' mm? ' +
+        'Check it in the preview before you run it.' +
+        '<br><br><span style="opacity:.7;font-size:.9em">To change this question, open Drag Knife: ' +
+        '<b>When a drag knife program loads</b>.</span>',
+      messageHtml: true,
+      variant: 'info',
+      key: 'com.tmuka.drag-knife:load',
+      buttons: [
+        { value: 'skip', label: 'Load as it is', style: 'secondary' },
+        { value: 'convert', label: 'Convert', style: 'primary', isDefault: true }
+      ]
+    });
+    return v === 'convert';
+  }
+  if (typeof pluginContext.showDialog !== 'function') return false;
   var html =
     '<style>' +
     '.dkq{font-family:inherit;color:var(--color-text-primary,inherit);display:flex;flex-direction:column;gap:12px;max-width:440px}' +
