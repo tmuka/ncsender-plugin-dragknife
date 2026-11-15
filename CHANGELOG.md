@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8: Lead-ins off by default
 
 - **Lead into sharp corners is off by default:** every sharp corner swivels in place. Lead-ins leave short slits past the corners, which surprise people cutting vinyl or paper, most of all on busy programs. Turn it on (Job page, Corners) for thick material where a swivel can't turn the blade. Saved settings keep their choice.
 
