@@ -261,6 +261,18 @@
       <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span>
       <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span></label>
   </section>
+<section class="dk-card">
+    <h3 class="dk-card-title">Drag knife programs</h3>
+    <div class="dk-grid">
+      <div class="dk-field" style="grid-column: span 2"><label for="dk-onLoad">When a drag knife program loads</label>
+        <select class="dk-input" id="dk-onLoad" title="A program is a drag knife program when its tool is a Drag Knife in the Tool Library, or QuickCut made it for a drag knife.">
+          <option value="ask">Ask to convert it</option>
+          <option value="convert">Convert it</option>
+          <option value="off">Do nothing</option>
+        </select></div>
+    </div>
+    <div class="dk-hint">A drag knife program: its tool is a Drag Knife in the Tool Library, or QuickCut made it for a drag knife. Converting uses these settings, as <b>Process for drag knife</b> does, and keeps the program’s name. A program that also uses another tool is left as it is.</div>
+  </section>
     </div>
     <div class="dk-page" id="dk-page-setup" role="tabpanel" hidden>
 <section class="dk-card">
@@ -741,6 +753,7 @@ var DragKnife = (function () {
     turnDepth: 0.25,     // how deep it turns, as a fraction of the cut's depth (0..1)
     lineUp: true,        // before the program's first cut (the blade's heading unknown), drag a short line in the waste to line it up
     saveToFileManager: false,   // the dialog: also save results (and temporary originals) to File Manager › Drag Knife
+    onLoad: 'ask',       // a drag knife program loads (its tool's type in the Tool Library, or QuickCut's note): 'ask' to convert it, 'convert', or 'off'
     // the offset test (the dialog): step 0 = 15 % of the offset, size 0 = from the offsets
     testStep: 0, testCount: 5, testSize: 0, testDepth: 0.3, testFeed: 1000, testUncorrected: true,
     lastTest: '',        // the offsets of the last test loaded, "4.2,5.1,6", for picking the best tile
@@ -750,6 +763,7 @@ var DragKnife = (function () {
   var PROTECT = ['auto', 'inside', 'outside', 'none'];
   var ZZERO = ['auto', 'top', 'bottom', 'other'];
   var LIFTMODE = ['off', 'always', 'auto'];
+  var ONLOAD = ['ask', 'convert', 'off'];
   // What a saved knife holds: the blade and how it moves. Not the material top, the
   // spindle switch, the side to protect or the offset test's fields.
   var KNIFE_KEYS = ['offset', 'swivelAngle', 'rampLength', 'liftOut', 'startTurn', 'turnDepth', 'lineUp', 'leadIn', 'leadInAngle',
@@ -880,6 +894,7 @@ var DragKnife = (function () {
       if (k === 'zZero') { s[k] = raw && ZZERO.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       if (k === 'protect') { s[k] = raw && PROTECT.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       if (k === 'liftMode') { s[k] = raw && LIFTMODE.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
+      if (k === 'onLoad') { s[k] = raw && ONLOAD.indexOf(raw[k]) >= 0 ? raw[k] : DEFAULTS[k]; continue; }
       var n = raw && raw[k] !== undefined && raw[k] !== '' ? Number(raw[k]) : DEFAULTS[k];
       s[k] = isFinite(n) ? n : DEFAULTS[k];
     }
@@ -963,6 +978,41 @@ var DragKnife = (function () {
   function processedFrom(text) { var m = /\(dragknife [^)]*\bfrom ([^,)]*)/i.exec(text); return m ? m[1].trim() : null; }
   function isOffsetTest(text) { return /\(\s*dragknife processed: offset test/i.test(text); }
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
+
+  // Is this a program for a drag knife, not yet processed? QuickCut wrote it for one
+  // (its "Entry: ... for a drag knife" note), or every tool it names (T words) is a
+  // drag knife in the Tool Library (`tools`: [{ id, toolId, name, type }]; T is the
+  // tool's ID). A program that also names another tool, or one the library doesn't
+  // know, isn't one.
+  // -> { why: 'quickcut' | 'tool', t: the T number or null, name: the tool's name or '' } or null
+  function knifeProgram(text, tools) {
+    text = String(text || '');
+    if (isProcessed(text)) return null;
+    var byT = {};
+    (Array.isArray(tools) ? tools : []).forEach(function (tl) {
+      if (!tl) return;
+      var id = tl.toolId !== undefined && tl.toolId !== null ? tl.toolId : tl.id;
+      if (id !== undefined && id !== null) byT[String(Number(id))] = tl;
+    });
+    var ts = [], seen = {}, re = /T\s*(\d+)/gi, m;
+    text.split('\n').forEach(function (line) {
+      var code = line.replace(/\([^)]*\)/g, '').replace(/;.*/, '');
+      re.lastIndex = 0;
+      while ((m = re.exec(code))) {
+        var t = String(Number(m[1]));
+        if (!seen[t]) { seen[t] = true; ts.push(t); }
+      }
+    });
+    var first = ts.length ? byT[ts[0]] : null;
+    var named = { t: ts.length ? Number(ts[0]) : null, name: first ? String(first.name || '') : '' };
+    if (/^\s*\(Entry:[^)]*\bfor a drag knife\)/im.test(text) && ts.length <= 1) return { why: 'quickcut', t: named.t, name: named.name };
+    if (!ts.length) return null;
+    for (var i = 0; i < ts.length; i++) {
+      var tl = byT[ts[i]];
+      if (!tl || tl.type !== 'drag-knife') return null;
+    }
+    return { why: 'tool', t: named.t, name: named.name };
+  }
 
   // ---------- where the material is ----------
   // readZ(text, settings) -> { mode: 'top'|'bottom'|'other', auto, by: 'set'|'comment'|'heights',
@@ -1938,7 +1988,7 @@ var DragKnife = (function () {
     KNIFE_KEYS: KNIFE_KEYS, readKnives: readKnives, readZ: readZ,
     offsetTest: offsetTest, testOffsets: testOffsets, testTile: testTile, isOffsetTest: isOffsetTest, testSize: testSize,
     sourceLabel: function (name) { return commentText(String(name).replace(/[()]/g, ''), 50); }, processedFrom: processedFrom,
-    DEFAULTS: DEFAULTS, process: process, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
+    DEFAULTS: DEFAULTS, process: process, knifeProgram: knifeProgram, analyze: analyze, trace: trace, dragTip: dragTip, readSettings: readSettings, isProcessed: isProcessed,
     parseLine: parseLine, stripSpindleWords: stripSpindleWords, _internal: { turn: turn, tangentAt: tangentAt, elemLen: elemLen, splitAt: splitAt, sweepOf: sweepOf, centerFromR: centerFromR }
   };
 })();
@@ -2103,6 +2153,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   var saveFiles = $('dk-saveFiles');
   saveFiles.checked = !!cfg.saveToFileManager;
   saveFiles.addEventListener('change', function() { cfg.saveToFileManager = saveFiles.checked; save(); });
+  var onLoad = $('dk-onLoad');
+  onLoad.value = cfg.onLoad;
+  onLoad.addEventListener('change', function() { cfg.onLoad = onLoad.value; save(); });
   // Where Z0 is, and the depth of cut that gives with the loaded program.
   // Lift at sharp corners: Off, Always, or When deeper than (the default).
   var liftMode = $('dk-liftMode');

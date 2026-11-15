@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Asks to convert a drag knife program as it loads: one whose tool is a Drag Knife in the Tool Library, or that QuickCut made for a drag knife. **When a drag knife program loads** (Job page) chooses Ask to convert it, Convert it, or Do nothing.
+
 ## 0.1.6: Review fixes and a higher lift
 
 - From an independent review of 0.1.4 and 0.1.5:

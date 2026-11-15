@@ -4,6 +4,7 @@
   "version": "0.1.6",
   "minAppVersion": "2.0.88",
   "configUi": "config.html",
+  "commands": "commands.js",
   "icon": "icon.png",
   "author": "tmuka",
   "repository": "https://github.com/tmuka/ncsender-plugin-dragknife",
@@ -13,7 +14,9 @@
     "v2": "2.0.88",
     "pro-v2": "2.0.149"
   },
-  "events": [],
+  "events": [
+    "onGcodeProgramLoad"
+  ],
   "permissions": [
     "gcode.modify"
   ],
