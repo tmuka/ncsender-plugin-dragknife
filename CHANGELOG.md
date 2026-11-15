@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.7: Ask as a drag knife program loads
 
 - **Asks to convert a drag knife program as it loads:** one whose tool is a Drag Knife in the Tool Library, or that QuickCut made for a drag knife. **When a drag knife program loads** (Job page) chooses Ask to convert it, Convert it, or Do nothing. The question is ncSender's own prompt, like its other confirmations (a plugin dialog on ncSender versions without it).
   - Only programs up to 4 KB convert as they load. ncSender limits what a plugin may do there, and going over would stop jobs until the program loaded again. A bigger one loads as it is, with a notice to use **Process for drag knife**.
