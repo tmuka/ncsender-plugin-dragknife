@@ -1286,6 +1286,13 @@ var DragKnife = (function () {
 if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
 /* END lib/drag-knife.cjs */
 
+// ncSender calls this with the saved settings when the plugin starts and when they
+// change; what it returns is the hook's `settings`. The raw ones: the processor
+// reads them itself (as the dialog's Process does).
+function buildInitialConfig(raw) {
+  return raw && typeof raw === 'object' ? raw : {};
+}
+
 function dkLog(msg) {
   try { if (typeof pluginContext !== 'undefined' && pluginContext.log) pluginContext.log('[Drag Knife] ' + msg); } catch (e) { /* no log */ }
 }

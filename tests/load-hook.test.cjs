@@ -29,6 +29,16 @@ const BY_TOOL = square('M6 T791');
 const BY_QUICKCUT = square('(Entry: straight down, no ramps, for a drag knife)');
 const S = { offset: 4.56 };
 
+test('load hook: has what ncSender calls when it starts the script', () => {
+  const box = { pluginContext: {} };
+  vm.createContext(box);
+  vm.runInContext(SRC, box);
+  assert.equal(typeof box.buildInitialConfig, 'function');
+  assert.equal(typeof box.onGcodeProgramLoad, 'function');
+  assert.deepEqual(JSON.parse(JSON.stringify(box.buildInitialConfig({ offset: 3 }))), { offset: 3 });
+  assert.doesNotMatch(SRC, /^\s*(import|export)\b/m);
+});
+
 test('load hook: a program for a Drag Knife tool asks, and converts on Convert', () => {
   const h = hook();
   const out = h.run(BY_TOOL, S);
