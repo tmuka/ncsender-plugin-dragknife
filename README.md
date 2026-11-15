@@ -145,6 +145,19 @@ vinyl-cutter blades (0.25 to 0.5 mm) the circle is too small to measure well; st
 
 Settings are saved as you change them. Lengths are in mm; inch programs are handled.
 
+### As a program loads
+
+Drag Knife also notices a drag knife program as it loads: one whose tool is a Drag Knife in the Tool Library
+(ncSender's drag-knife tool type), or that QuickCut made for a drag knife. **When a drag knife program loads**
+(Job page) chooses what happens: **Ask to convert it** (the default), **Convert it**, or **Do nothing**. Converting
+uses the same settings as **Process for drag knife** and keeps the program's name.
+
+- ncSender converts on load only programs up to 4 KB (the limit on what a plugin may do there). A bigger one loads as
+  it is, with a notice: use **Process for drag knife**.
+- To try other settings after a conversion on load, load the original again, choose **Load as it is**, then use
+  **Process for drag knife**.
+- While the question is open, ncSender waits for the answer: other plugins' checks (tool changes, for one) wait too.
+
 ## What it won't rewrite
 
 It stops with the line number instead of guessing on incremental moves (G91) or cutter compensation (G41/G42)

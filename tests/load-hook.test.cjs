@@ -109,3 +109,34 @@ test('load hook: never throws; a program it can\'t convert loads as it is, with 
   if (out === bad) assert.ok(h.notices.length <= 1);
   const thrower = hook(); thrower.run(null, S);
 });
+
+test('load hook: T is the Tool ID only; T0 and words like $ADB_RETRACT 1 aren\'t tools', () => {
+  // A knife with no Tool ID whose internal id is 12 doesn't make T12 (an endmill) a knife.
+  const clash = hook({ tools: [{ id: 5, toolId: 12, name: 'Endmill', type: 'flat' }, { id: 12, toolId: null, name: 'Knife', type: 'drag-knife' }] });
+  const t12 = square('M6 T12');
+  assert.equal(clash.run(t12, S), t12);
+  assert.equal(clash.asked.length, 0);
+  const h = hook();
+  assert.match(h.run(square('M6T791') + 'M6 T0\n', S), /dragknife processed/, 'M6T791, then T0 to put it away');
+  assert.match(h.run('$ADB_RETRACT 1\n' + BY_TOOL, S), /dragknife processed/);
+  assert.equal(h.asked.length, 2);
+});
+
+test('load hook: over 4 KB it doesn\'t ask or convert; a notice points to Process', () => {
+  let big = 'M6 T791\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-1 F300\n';
+  for (let i = 0; big.length <= 4096; i++) big += 'G1 X' + (i % 2 ? 40 : 0) + ' Y' + i * 0.1 + ' F1000\n';
+  big += 'G0 Z5\nM30\n';
+  const h = hook();
+  assert.equal(h.run(big, S), big);
+  assert.equal(h.asked.length, 0);
+  assert.equal(h.notices.length, 1);
+  assert.match(h.notices[0], /over 4 KB, too big to convert as it loads[\s\S]*Process for drag knife/);
+});
+
+test('load hook: Convert with nothing to convert says so', () => {
+  const h = hook();
+  const none = 'M6 T791\nG21 G90\nG0 Z5\nG0 X10 Y10\nM30\n';
+  assert.equal(h.run(none, S), none);
+  assert.equal(h.notices.length, 1);
+  assert.match(h.notices[0], /no cuts to convert/);
+});

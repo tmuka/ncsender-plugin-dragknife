@@ -271,32 +271,35 @@ var DragKnife = (function () {
   function isProcessed(text) { return /\(\s*dragknife\b[^)]*processed/i.test(text); }
 
   // Is this a program for a drag knife, not yet processed? QuickCut wrote it for one
-  // (its "Entry: ... for a drag knife" note), or every tool it names (T words) is a
-  // drag knife in the Tool Library (`tools`: [{ id, toolId, name, type }]; T is the
-  // tool's ID). A program that also names another tool, or one the library doesn't
-  // know, isn't one.
+  // (its "Entry: ... for a drag knife" note), or every tool it names (T words, T0 aside)
+  // is a drag knife in the Tool Library (`tools`: [{ toolId, name, type }]; T is the
+  // tool's Tool ID). A program that also names another tool, or one the library doesn't
+  // know, isn't one. Runs in ncSender's server as every program loads, under a memory
+  // limit: one pass over the text, nothing per line, and nothing at all when no tool is
+  // a drag knife and there's no QuickCut note.
   // -> { why: 'quickcut' | 'tool', t: the T number or null, name: the tool's name or '' } or null
   function knifeProgram(text, tools) {
     text = String(text || '');
-    if (isProcessed(text)) return null;
-    var byT = {};
+    var byT = {}, knives = 0;
     (Array.isArray(tools) ? tools : []).forEach(function (tl) {
-      if (!tl) return;
-      var id = tl.toolId !== undefined && tl.toolId !== null ? tl.toolId : tl.id;
-      if (id !== undefined && id !== null) byT[String(Number(id))] = tl;
+      if (!tl || tl.toolId === undefined || tl.toolId === null) return;
+      var k = String(Number(tl.toolId));
+      if (!(k in byT)) byT[k] = tl;
+      if (tl.type === 'drag-knife') knives++;
     });
-    var ts = [], seen = {}, re = /T\s*(\d+)/gi, m;
-    text.split('\n').forEach(function (line) {
-      var code = line.replace(/\([^)]*\)/g, '').replace(/;.*/, '');
-      re.lastIndex = 0;
-      while ((m = re.exec(code))) {
-        var t = String(Number(m[1]));
-        if (!seen[t]) { seen[t] = true; ts.push(t); }
-      }
-    });
+    var qc = /^[ \t]*\(Entry:[^)\n]*\bfor a drag knife\)/im.test(text);
+    if (!qc && !knives) return null;
+    if (isProcessed(text)) return null;
+    // Comments are skipped; a T starts a word (M6T3 counts; $ADB_RETRACT 1 doesn't).
+    var ts = [], seen = {}, re = /\([^)\n]*\)|;[^\n]*|(?:^|[^A-Za-z_$#])T[ \t]*(\d+)/gim, m;
+    while ((m = re.exec(text))) {
+      if (m[1] === undefined) continue;
+      var t = String(Number(m[1]));
+      if (t !== '0' && !seen[t]) { seen[t] = true; ts.push(t); }
+    }
     var first = ts.length ? byT[ts[0]] : null;
     var named = { t: ts.length ? Number(ts[0]) : null, name: first ? String(first.name || '') : '' };
-    if (/^\s*\(Entry:[^)]*\bfor a drag knife\)/im.test(text) && ts.length <= 1) return { why: 'quickcut', t: named.t, name: named.name };
+    if (qc && ts.length <= 1) return { why: 'quickcut', t: named.t, name: named.name };
     if (!ts.length) return null;
     for (var i = 0; i < ts.length; i++) {
       var tl = byT[ts[i]];
@@ -422,17 +425,35 @@ var DragKnife = (function () {
       }
       return c;
     }
+    // Does the closed polygon cross itself? A sweep: segments sorted by their left end,
+    // each tested only against the ones that overlap it in x. Plain numbers, no objects
+    // per test: ncSender runs this as a program loads, under a memory (allocation) limit.
     function crosses(poly) {
       var n = poly.length;
-      if (n > 3000) return false; // too big to check pair by pair; assume simple
-      function hit(a, b, c, d) {
-        if (Math.max(a.x, b.x) < Math.min(c.x, d.x) || Math.min(a.x, b.x) > Math.max(c.x, d.x) || Math.max(a.y, b.y) < Math.min(c.y, d.y) || Math.min(a.y, b.y) > Math.max(c.y, d.y)) return false;
-        var d1 = cross(sub(b, a), sub(c, a)), d2 = cross(sub(b, a), sub(d, a)), d3 = cross(sub(d, c), sub(a, c)), d4 = cross(sub(d, c), sub(b, c));
-        return d1 * d2 < -1e-12 && d3 * d4 < -1e-12;
+      if (n < 4) return false;
+      var x0 = [], x1 = [], y0 = [], y1 = [], ord = [];
+      for (var k = 0; k < n; k++) {
+        var p = poly[k], q = poly[(k + 1) % n];
+        x0.push(Math.min(p.x, q.x)); x1.push(Math.max(p.x, q.x));
+        y0.push(Math.min(p.y, q.y)); y1.push(Math.max(p.y, q.y));
+        ord.push(k);
       }
-      for (var i = 0; i < n; i++) for (var j = i + 2; j < n; j++) {
-        if (i === 0 && j === n - 1) continue;
-        if (hit(poly[i], poly[(i + 1) % n], poly[j], poly[(j + 1) % n])) return true;
+      ord.sort(function (a, b) { return x0[a] - x0[b]; });
+      for (var oi = 0; oi < n; oi++) {
+        var i = ord[oi];
+        for (var oj = oi + 1; oj < n; oj++) {
+          var j = ord[oj];
+          if (x0[j] > x1[i]) break;
+          if (y1[j] < y0[i] || y0[j] > y1[i]) continue;
+          var d = i > j ? i - j : j - i;
+          if (d === 1 || d === n - 1) continue; // neighbours share an end
+          var a = poly[i], b = poly[(i + 1) % n], c = poly[j], e = poly[(j + 1) % n];
+          var bx = b.x - a.x, by = b.y - a.y, ex = e.x - c.x, ey = e.y - c.y;
+          var d1 = bx * (c.y - a.y) - by * (c.x - a.x), d2 = bx * (e.y - a.y) - by * (e.x - a.x);
+          if (d1 * d2 >= -1e-12) continue;
+          var d3 = ex * (a.y - c.y) - ey * (a.x - c.x), d4 = ex * (b.y - c.y) - ey * (b.x - c.x);
+          if (d3 * d4 < -1e-12) return true;
+        }
       }
       return false;
     }
@@ -1372,28 +1393,52 @@ function dkNotice(title, message) {
   } catch (e) { /* no notice */ }
 }
 
+// ncSender runs this hook under a 50 MB limit on everything the script allocates in
+// one call, garbage included; going over can't be caught here, and ncSender then
+// refuses jobs until the program loads again. Measured on ncSender's engine (Jint):
+// conversion fails from about 9 KB of G-code with many shapes, 15 KB with one; the
+// detection scan from about 30 MB. So convert only up to 4 KB here (the dialog's
+// Process has no limit), and don't look at programs over 8 MB.
+var DK_CONVERT_MAX = 4096, DK_SCAN_MAX = 8000000;
+
+function dkKB(n) { return Math.round(n / 1024) + ' KB'; }
+function dkPlural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+
 function onGcodeProgramLoad(content, context, settings) {
   // Never throws: a throw leaves ncSender refusing jobs until the program is loaded again.
   try {
     var cfg = DragKnife.readSettings(settings || {});
     if (cfg.onLoad === 'off' || !(cfg.offset > 0)) return content;
+    if (typeof content !== 'string' || content.length > DK_SCAN_MAX) return content;
     var found = DragKnife.knifeProgram(content, dkTools());
     if (!found) return content;
     var file = context && context.filename ? String(context.filename) : '';
+    var name = file || 'This program';
     dkLog(file + ': a drag knife program (' + found.why + ')');
+    if (content.length > DK_CONVERT_MAX) {
+      dkNotice('Drag Knife', name + ' looks like a drag knife program, but it\u2019s over ' + dkKB(DK_CONVERT_MAX) +
+        ', too big to convert as it loads. It loaded as it is: open Drag Knife and press Process for drag knife.');
+      return content;
+    }
     if (cfg.onLoad === 'ask' && !dkAsk(file, found, cfg)) return content;
     var res;
     try {
       res = DragKnife.process(content, settings || {}, { source: file || 'program' });
     } catch (e) {
-      dkNotice('Drag Knife', 'Couldn’t convert ' + (file || 'the program') + ', so it loaded as it is: ' + (e && e.message ? e.message : e));
+      dkNotice('Drag Knife', 'Couldn\u2019t convert ' + (file || 'the program') + ', so it loaded as it is: ' + (e && e.message ? e.message : e));
       return content;
     }
-    if (!res.changed || !res.stats.rewritten) {
-      dkLog(file + ': nothing to rewrite');
+    var st = res.stats || {};
+    if (!res.changed) {
+      dkNotice('Drag Knife', name + ' loaded as it is: it has no cuts to convert.');
       return content;
     }
-    dkLog(file + ': converted, ' + res.stats.rewritten + ' cuts rewritten');
+    // As the dialog's Process: the result even when only spindle starts came out.
+    var warn = (st.autoProblems || []).slice();
+    if (st.tightArcs) warn.push(dkPlural(st.tightArcs, 'arc is', 'arcs are') + ' tighter than the blade offset; the blade may not follow ' + (st.tightArcs === 1 ? 'it.' : 'them.'));
+    if (!st.rewritten) warn.unshift('No cuts were rewritten; only ' + dkPlural(st.spindleRemoved, 'spindle start') + ' came out.');
+    if (warn.length) dkNotice('Drag Knife', 'Converted ' + name + '. Check it in the preview: ' + warn.join(' '));
+    dkLog(file + ': converted, ' + (st.rewritten || 0) + ' cuts rewritten');
     return res.text;
   } catch (e) {
     dkLog('onGcodeProgramLoad failed: ' + (e && e.message ? e.message : e));

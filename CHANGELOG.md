@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Asks to convert a drag knife program as it loads: one whose tool is a Drag Knife in the Tool Library, or that QuickCut made for a drag knife. **When a drag knife program loads** (Job page) chooses Ask to convert it, Convert it, or Do nothing. The question is ncSender's own prompt, like its other confirmations (on ncSender versions without it, a plugin dialog).
+- **Asks to convert a drag knife program as it loads:** one whose tool is a Drag Knife in the Tool Library, or that QuickCut made for a drag knife. **When a drag knife program loads** (Job page) chooses Ask to convert it, Convert it, or Do nothing. The question is ncSender's own prompt, like its other confirmations (a plugin dialog on ncSender versions without it).
+  - Only programs up to 4 KB convert as they load. ncSender limits what a plugin may do there, and going over would stop jobs until the program loaded again. A bigger one loads as it is, with a notice to use **Process for drag knife**.
+  - A conversion with warnings (tight arcs, shapes auto can't sort out) or with nothing to convert says so in a notice.
+  - While the question is open, ncSender waits for the answer.
+- The check for shapes that cross themselves is much quicker on shapes with many points.
 
 ## 0.1.6: Review fixes and a higher lift
 
