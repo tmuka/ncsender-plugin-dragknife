@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.9: New icon
 
 - New icon: a blade holder swiveling over its tip.
 
