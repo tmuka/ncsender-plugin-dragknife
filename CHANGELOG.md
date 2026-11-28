@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.10: Two balanced columns, steppers and toggles
 
 - **Landscape fits the window again:** the settings flow into two balanced columns of cards beside the preview (also on a tall 1080 px wide screen), so nothing scrolls at 1920 x 1080.
 - **-/+ buttons on the number fields** for a touch screen (ncsender-unit-input 0.1.6), also on angles, percentages and counts.
