@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Landscape fits the window again:** the settings flow into two balanced columns of cards beside the preview (also on a tall 1080 px wide screen), so nothing scrolls at 1920 x 1080.
+- **-/+ buttons on the number fields** for a touch screen (ncsender-unit-input 0.1.6), also on angles, percentages and counts.
+- **Toggles instead of checkboxes** for the on/off settings (Lead into sharp corners, Remove spindle starts, Turn the blade in place, Line up the blade, Also cut tile 0).
+
 ## 0.1.9: New icon
 
 - New icon: a blade holder swiveling over its tip.

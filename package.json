@@ -10,6 +10,6 @@
     "build": "bash .scripts/build.sh"
   },
   "devDependencies": {
-    "ncsender-unit-input": "github:tmuka/ncsender-unit-input#v0.1.5"
+    "ncsender-unit-input": "github:tmuka/ncsender-unit-input#v0.1.6"
   }
 }

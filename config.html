@@ -86,6 +86,13 @@
   #dk-side-svg.dk-zoomed { cursor: grab; }
   #dk-side-svg.dk-dragging { cursor: grabbing; }
   .dk-fit { padding: 2px 12px !important; min-height: 0 !important; font-size: 0.85em; }
+  /* Wide windows: the settings fill two balanced columns of cards; in landscape beside the preview, so the
+     whole dialog fits the window (cards flow down column one, then column two). */
+  @media (min-width: 900px) {
+    .dk-body { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+    .dk-page:not([hidden]) { display: block; column-count: 2; column-gap: 12px; column-fill: balance; }
+    .dk-page > .dk-card { break-inside: avoid; margin-bottom: 12px; }
+  }
   /* Tall screens: the views on top, the settings scroll below. */
   @media (orientation: portrait) {
     .dk-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
@@ -171,6 +178,9 @@
   #dk-knife-said .dk-btn { min-height: 30px; padding: 2px 10px !important; margin-top: 4px; }
   #dk-z-say[data-state="warn"] { color: var(--dk-warn); }
   #dk-z-say[data-state="bad"] { color: var(--dk-danger); }
+  .dk-tog { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-left: 0; width: 100%; line-height: 1.4; }
+  .dk-tog > span:first-child { flex: 1; min-width: 0; }
+  .dk-tog .dk-switch-track { margin-top: 1px; }
   .dk-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; cursor: pointer; }
   .dk-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--color-accent); }
 </style>
@@ -234,15 +244,19 @@
         </select></div>
       <div class="dk-field" id="dk-thickness-field"><label for="dk-thickness">Material thickness (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-thickness" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="With Z0 on the bed, the top of the material is this high: cuts are measured down from it."></div>
-      <div class="dk-field" id="dk-surfaceZ-field"><label for="dk-surfaceZ">Material top at Z</label><input class="dk-input" id="dk-surfaceZ" inputmode="decimal"
+      <div class="dk-field" id="dk-surfaceZ-field"><label for="dk-surfaceZ">Material top at Z</label><input class="dk-input" id="dk-surfaceZ" data-step="1" inputmode="decimal"
         title="In the program's units. Moves below this are cuts."></div>
     </div>
     <div class="dk-hint" id="dk-z-say" aria-live="polite"></div>
   </section>
 <section class="dk-card">
+    <h3 class="dk-card-title">Safety</h3>
+    <label class="dk-switch dk-tog"><span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span>
+      <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span><input type="checkbox" role="switch" id="dk-stripSpindle"><span class="dk-switch-track" aria-hidden="true"></span></label>
+  </section>
+<section class="dk-card">
     <h3 class="dk-card-title">Corners</h3>
-    <label class="dk-check"><input type="checkbox" id="dk-leadIn">
-      <span><b>Lead into sharp corners</b><span class="dk-hint" style="display:block">Hop up at the corner, come down behind it on the next line extended, and cut into the corner already lined up. Off: every sharp corner swivels in place.</span></span></label>
+    <label class="dk-switch dk-tog"><span><b>Lead into sharp corners</b><span class="dk-hint" style="display:block">Hop up at the corner, come down behind it on the next line extended, and cut into the corner already lined up. Off: every sharp corner swivels in place.</span></span><input type="checkbox" role="switch" id="dk-leadIn"><span class="dk-switch-track" aria-hidden="true"></span></label>
     <div class="dk-grid" id="dk-protect-fields">
       <div class="dk-field" style="grid-column: span 2"><label for="dk-protect">Keep lead-ins off</label>
         <select class="dk-input" id="dk-protect" title="A lead-in cuts a short tapered slit on the next line extended past the corner: outside the shape at outside corners, into it at inside (notch) corners. Choose the side that's your part; corners whose lead-in would cut it swivel instead. Auto treats a shape inside another as a hole (and a shape inside a hole as a part again).">
@@ -254,12 +268,6 @@
     </div>
     <div class="dk-auto" id="dk-auto" hidden aria-live="polite"></div>
     <div class="dk-hint">A lead-in cuts a short tapered slit beyond the corner. Auto keeps it off parts: outlines lead in on their outside, holes inside a part on their inside. Open paths have no inside or outside, so they swivel unless “Nothing” is chosen. Corners that lead in don’t also lift.</div>
-  </section>
-<section class="dk-card">
-    <h3 class="dk-card-title">Safety</h3>
-    <label class="dk-check"><input type="checkbox" id="dk-stripSpindle">
-      <span>Remove spindle starts (M3, M4 and S speeds)<span class="dk-hint" style="display:block">A drag knife must never spin. M5 (spindle off) stays. Each removed line is left commented out, marked “removed by Drag Knife”.</span>
-      <span class="dk-hint dk-danger-text" id="dk-spindle-warn" style="display:block" hidden>Off: M3, M4 and S stay in the program, so the spindle can start with the knife in it. Turn this back on unless the spindle is disconnected.</span></span></label>
   </section>
 <section class="dk-card">
     <h3 class="dk-card-title">Drag knife programs</h3>
@@ -279,7 +287,7 @@
     <h3 class="dk-card-title">Blade</h3>
     <div class="dk-hint">These settings belong to the knife: set them once, then keep them with <b>Save as a knife…</b> on the Job page.</div>
     <div class="dk-grid">
-      <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" inputmode="decimal"
+      <div class="dk-field"><label for="dk-swivelAngle">Swivel above (°)</label><input class="dk-input" id="dk-swivelAngle" data-step="1" data-min="0" data-max="180" inputmode="decimal"
         title="Turns sharper than this get a swivel: the holder swings around the corner so the tip turns in place. Gentler turns are left to drag."></div>
     </div>
     <div class="dk-hint">Lengths are in your units preference; type either kind (<code>1/4"</code>, <code>6mm</code>, <code>2mm+1/16"</code>). They're converted for the program's units.</div>
@@ -291,20 +299,18 @@
         title="Each cut starts at the material top and reaches full depth over this distance along the path, so the blade lines up while shallow. Closed shapes recut this stretch at full depth at the end. 0 plunges straight down."></div>
       <div class="dk-field"><label for="dk-liftOut">Lift out over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftOut" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="Closed shapes rise to the material top over this distance while still moving along the shape, over ground already cut. 0 lifts straight up."></div>
-      <div class="dk-field"><label for="dk-turnDepth">Turn at (% of depth)</label><input class="dk-input" id="dk-turnDepth" inputmode="decimal"
+      <div class="dk-field"><label for="dk-turnDepth">Turn at (% of depth)</label><input class="dk-input" id="dk-turnDepth" data-step="1" data-min="0" data-max="100" inputmode="decimal"
         title="How deep the blade goes to turn in place before a cut, as a percentage of the cut's depth: shallow, so it turns with little drag."></div>
     </div>
-    <label class="dk-check"><input type="checkbox" id="dk-startTurn">
-      <span><b>Turn the blade in place before each cut</b><span class="dk-hint" style="display:block">The blade keeps pointing the way it last cut. Before the next cut, and where it comes down for a lead-in, the tip lands on the start, turns there (shallow), then ramps in already lined up. The program&rsquo;s first cut can&rsquo;t know which way the blade points: see the next switch.</span></span></label>
-    <label class="dk-check"><input type="checkbox" id="dk-lineUp">
-      <span><b>Line up the blade before the first cut</b><span class="dk-hint" style="display:block">Before the program&rsquo;s first cut, the blade drags a short shallow line (5 offsets) in the waste beside the start, so it&rsquo;s lined up wherever the last job left it and the start mark lands in the waste. Only where there&rsquo;s clear room: outside a part, inside a hole, not past X0 or Y0.</span></span></label>
+    <label class="dk-switch dk-tog"><span><b>Turn the blade in place before each cut</b><span class="dk-hint" style="display:block">The blade keeps pointing the way it last cut. Before the next cut, and where it comes down for a lead-in, the tip lands on the start, turns there (shallow), then ramps in already lined up. The program&rsquo;s first cut can&rsquo;t know which way the blade points: see the next switch.</span></span><input type="checkbox" role="switch" id="dk-startTurn"><span class="dk-switch-track" aria-hidden="true"></span></label>
+    <label class="dk-switch dk-tog"><span><b>Line up the blade before the first cut</b><span class="dk-hint" style="display:block">Before the program&rsquo;s first cut, the blade drags a short shallow line (5 offsets) in the waste beside the start, so it&rsquo;s lined up wherever the last job left it and the start mark lands in the waste. Only where there&rsquo;s clear room: outside a part, inside a hole, not past X0 or Y0.</span></span><input type="checkbox" role="switch" id="dk-lineUp"><span class="dk-switch-track" aria-hidden="true"></span></label>
     <div class="dk-hint dk-warn-text" id="dk-lengths-warn" hidden aria-live="polite"></div>
   </section>
 <section class="dk-card">
     <h3 class="dk-card-title">Lead-ins at sharp corners</h3>
     <div class="dk-hint">Used when <b>Lead into sharp corners</b> is on (Job page, Corners).</div>
     <div class="dk-grid" id="dk-leadIn-fields">
-      <div class="dk-field"><label for="dk-leadInAngle">Lead in above (°)</label><input class="dk-input" id="dk-leadInAngle" inputmode="decimal"
+      <div class="dk-field"><label for="dk-leadInAngle">Lead in above (°)</label><input class="dk-input" id="dk-leadInAngle" data-step="1" data-min="0" data-max="180" inputmode="decimal"
         title="Turns sharper than this hop up and come back down behind the corner, on the next line extended, then cut into the corner along it, so the blade is already lined up when the cut begins. 0 turns them off too."></div>
       <div class="dk-field"><label for="dk-leadInLength">Lead-in length (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-leadInLength" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="How far behind the corner the lead-in starts. The blade ramps from the material top to full depth over this, so it lines up while shallow. A few times the blade offset."></div>
@@ -324,9 +330,9 @@
         </select></div>
       <div class="dk-field" id="dk-liftDepth-field"><label for="dk-liftDepth">Deeper than (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftDepth" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="With Lift: When deeper than, corners cut deeper than this below the material top lift; shallower ones swivel at depth."></div>
-      <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" inputmode="decimal"
+      <div class="dk-field"><label for="dk-liftAngle">Lift above (°)</label><input class="dk-input" id="dk-liftAngle" data-step="1" data-min="0" data-max="180" inputmode="decimal"
         title="Turns sharper than this rise partway during the swivel, so the blade turns with less drag, then ramp back to depth."></div>
-      <div class="dk-field"><label for="dk-liftFraction">Lift height (%)</label><input class="dk-input" id="dk-liftFraction" inputmode="decimal"
+      <div class="dk-field"><label for="dk-liftFraction">Lift height (%)</label><input class="dk-input" id="dk-liftFraction" data-step="1" data-min="0" data-max="100" inputmode="decimal"
         title="How far toward the material top the blade rises during a lifted swivel, as a percentage of the depth: 75 % on a 4 mm cut swivels 1 mm deep. Higher is better for an angled blade, whose buried edge sweeps the corner (100 % would swivel at the top, where the blade can't turn)."></div>
       <div class="dk-field"><label for="dk-liftRamp">Back to depth over (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-liftRamp" type="text" data-unit="length" data-min="0" inputmode="decimal"
         title="After a lifted swivel, the distance over which the blade goes back to full depth."></div>
@@ -341,7 +347,7 @@
         <div class="dk-grid">
           <div class="dk-field"><label for="dk-testStep">Step (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testStep" type="text" data-unit="length" data-min="0" inputmode="decimal"
             title="The difference in offset from one tile to the next. Empty or 0: 15 % of your blade offset."></div>
-          <div class="dk-field"><label for="dk-testCount">Tiles</label><input class="dk-input" id="dk-testCount" inputmode="numeric" title="How many offsets to try, 2 to 9, centred on your blade offset."></div>
+          <div class="dk-field"><label for="dk-testCount">Tiles</label><input class="dk-input" id="dk-testCount" data-step="1" data-min="2" data-max="9" inputmode="numeric" title="How many offsets to try, 2 to 9, centred on your blade offset."></div>
           <div class="dk-field"><label for="dk-testSize">Tile width (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testSize" type="text" data-unit="length" data-min="0" inputmode="decimal"
             title="The width of each test shape. Empty or 0: 4 times the largest offset, at least 10 mm."></div>
           <div class="dk-field"><label for="dk-testDepth">Cut depth (<span class="dk-unit">mm</span>)</label><input class="dk-input" id="dk-testDepth" type="text" data-unit="length" data-min="0" inputmode="decimal"
@@ -349,7 +355,7 @@
           <div class="dk-field"><label for="dk-testFeed">Feed (<span class="dk-unit">mm</span>/min)</label><input class="dk-input" id="dk-testFeed" type="text" data-unit="length" data-min="0" inputmode="decimal"
             title="Cutting feed. Plunges go at a third of it."></div>
         </div>
-        <label class="dk-check"><input type="checkbox" id="dk-testUncorrected"><span>Also cut tile 0 as drawn, uncorrected, at the left<span class="dk-hint" style="display:block">Its corners round off by about the blade offset: what the plugin corrects.</span></span></label>
+        <label class="dk-switch dk-tog"><span>Also cut tile 0 as drawn, uncorrected, at the left<span class="dk-hint" style="display:block">Its corners round off by about the blade offset: what the plugin corrects.</span></span><input type="checkbox" role="switch" id="dk-testUncorrected"><span class="dk-switch-track" aria-hidden="true"></span></label>
         <div class="dk-hint" id="dk-test-plan" aria-live="polite"></div>
         <div><button type="button" class="dk-btn" id="dk-test-load">Load offset test</button></div>
         <div class="dk-test-pick" id="dk-test-pick" hidden>
@@ -684,6 +690,7 @@ function wireUnitFields(root, opts) {
     if (!el || el.disabled || el.readOnly) return;
     if (evt.key === 'Enter') { normalize(el); return; }
     if (opts.arrows === false || (evt.key !== 'ArrowUp' && evt.key !== 'ArrowDown')) return;
+    if (el.parentNode && el.parentNode.classList && el.parentNode.classList.contains('nc-step')) return; // wireSteppers steps it
     var imp = imperial();
     var current = parseUnitValue(el.value, imp, el.getAttribute('data-unit'));
     if (current == null || !isFinite(current)) current = 0;
@@ -710,7 +717,153 @@ function wireUnitFields(root, opts) {
   };
 }
 
-return { MM_PER_INCH: MM_PER_INCH, parseUnitValue: parseUnitValue, unitValueProblem: unitValueProblem, unitMmPer: unitMmPer, parseUnitMath: parseUnitMath, parseUnitQuantity: parseUnitQuantity, roundDisplay: roundDisplay, mmToDisplay: mmToDisplay, displayToMm: displayToMm, formatMm: formatMm, textToMm: textToMm, roundInches: roundInches, wireUnitFields: wireUnitFields };
+// The stepper's look, as ncSender's probe dialog (ProbeStepper): the frame is
+// the field, the input inside it between the - and + buttons. ncSender's dialog
+// rules beat plugin classes, hence !important on the buttons. wireSteppers adds
+// it once to the page (opts.css false to style it yourself).
+var STEPPER_CSS = '.nc-step{display:flex;align-items:stretch;width:100%;height:36px;box-sizing:border-box;' +
+  'border:1px solid var(--color-border,#888);border-radius:var(--radius-small,4px);background:var(--color-surface,#fff);overflow:hidden}' +
+  '.nc-step:focus-within{border-color:var(--color-accent,#1abc9c)}' +
+  '.nc-step:has([aria-invalid="true"]){border-color:#d32f2f}' +
+  '.nc-step.is-disabled{opacity:.55}' +
+  '.nc-step>input{flex:1 1 0;min-width:0;width:auto;height:100%;margin:0;border:0 !important;border-radius:0;' +
+  'background:transparent;padding:0 4px;text-align:center;box-shadow:none !important;outline:none}' +
+  '.nc-step-btn{flex:0 0 34px;border:0 !important;padding:0 !important;margin:0;border-radius:0 !important;min-width:0 !important;' +
+  'background:color-mix(in srgb,var(--color-text-secondary,#888) 20%,var(--color-surface,#fff)) !important;' +
+  'color:var(--color-text-primary,#222) !important;font-family:inherit;font-size:1.25rem !important;font-weight:700;line-height:1;' +
+  'cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}' +
+  '.nc-step-btn:active:not(:disabled){background:color-mix(in srgb,var(--color-accent,#1abc9c) 35%,var(--color-surface,#fff)) !important}' +
+  '.nc-step-btn:disabled{opacity:.4;cursor:default}';
+
+/**
+ * - value + buttons around number fields, for a touch screen (as ncSender's
+ * probe dialog). For every field matching opts.selector (default
+ * 'input[data-unit], input[data-step]') under root:
+ *   - the buttons take no keyboard focus (tabindex -1): Tab still goes from
+ *     field to field;
+ *   - a press steps to the next whole step (4.3 + 1 -> 5), holding repeats
+ *     faster; Up / Down step too (Shift x10);
+ *   - each step fires `input` on the field, the end of a press `change`.
+ * Step, min and max: opts.stepOf(el, imperial) -> { step, min, max } in the
+ * units shown, else the field's data-step (or step), data-min (or min) and
+ * data-max (or max); step 1 when none. Typed units are read first (data-unit).
+ * Wire wireUnitFields too for typed units: it leaves the arrows to this.
+ * Returns { refresh, unwire }: refresh() after changing a field's value,
+ * disabled or limits from code (input and change events refresh by themselves).
+ */
+function wireSteppers(root, opts) {
+  opts = opts || {};
+  var doc = root.ownerDocument || document;
+  function imperial() {
+    return typeof opts.imperial === 'function' ? !!opts.imperial() : !!opts.imperial;
+  }
+  function attrNum(el, a, b) {
+    var t = el.getAttribute(a) != null ? el.getAttribute(a) : el.getAttribute(b);
+    var v = t == null || t === '' ? NaN : parseFloat(t);
+    return isFinite(v) ? v : null;
+  }
+  function spec(el) {
+    var s = (opts.stepOf && opts.stepOf(el, imperial())) ||
+      { step: attrNum(el, 'data-step', 'step'), min: attrNum(el, 'data-min', 'min'), max: attrNum(el, 'data-max', 'max') };
+    return { step: s.step > 0 ? s.step : 1, min: s.min == null ? -Infinity : s.min, max: s.max == null ? Infinity : s.max };
+  }
+  function valueOf(el) {
+    var t = el.value.trim();
+    if (!t) return null;
+    var v = el.getAttribute('data-unit') ? parseUnitValue(t, imperial(), el.getAttribute('data-unit')) : Number(t.replace(',', '.'));
+    return v == null || !isFinite(v) ? null : v;
+  }
+  function decimals(step) {
+    var s = String(step);
+    return s.indexOf('.') < 0 ? 0 : s.length - s.indexOf('.') - 1;
+  }
+  function fire(el, type) {
+    el.dispatchEvent(new Event(type, { bubbles: true }));
+  }
+  function bump(el, dir, times) {
+    if (el.disabled || el.readOnly) return false;
+    var s = spec(el), step = s.step * (times || 1), cur = valueOf(el);
+    var next = cur == null ? (dir > 0 ? Math.max(step, s.min) : s.min) :
+      (dir > 0 ? Math.floor(cur / step + 1e-6) + 1 : Math.ceil(cur / step - 1e-6) - 1) * step;
+    if (!isFinite(next)) return false;
+    next = Math.min(s.max, Math.max(s.min, next));
+    var text = String(Number(next.toFixed(decimals(s.step) + 2)));
+    if (text === el.value.trim()) return false;
+    el.value = text;
+    fire(el, 'input');
+    return true;
+  }
+  function refresh(box) {
+    var el = box.input, s = spec(el), v = valueOf(el);
+    box.minus.disabled = el.disabled || (v != null && v <= s.min + 1e-9);
+    box.plus.disabled = el.disabled || (v != null && v >= s.max - 1e-9);
+    box.el.classList.toggle('is-disabled', !!el.disabled);
+  }
+  var timer = null, held = null;
+  function release() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (held) { var el = held; held = null; fire(el, 'change'); }
+  }
+  function button(text, dir, el) {
+    var b = doc.createElement('button');
+    b.type = 'button'; b.className = 'nc-step-btn'; b.textContent = text; b.tabIndex = -1;
+    b.setAttribute('aria-label', (dir > 0 ? 'Increase ' : 'Decrease ') + (el.getAttribute('aria-label') || el.id || 'value'));
+    b.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || b.disabled) return;
+      e.preventDefault(); release(); held = el; bump(el, dir);
+      var delay = 400;
+      var again = function () {
+        if (!bump(el, dir)) return release();
+        delay = Math.max(50, delay * 0.8); timer = setTimeout(again, delay);
+      };
+      timer = setTimeout(again, delay);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (t) { b.addEventListener(t, release); });
+    b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    // A click with no pointer press (a screen reader, a keyboard on the button): one step.
+    b.addEventListener('click', function (e) { if (e.detail === 0 && bump(el, dir)) fire(el, 'change'); });
+    return b;
+  }
+  function onKey(e) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    if (bump(e.target, e.key === 'ArrowUp' ? 1 : -1, e.shiftKey ? 10 : 1)) fire(e.target, 'change');
+  }
+  if (opts.css !== false && doc.head && !doc.getElementById('nc-step-css')) {
+    var style = doc.createElement('style');
+    style.id = 'nc-step-css'; style.textContent = STEPPER_CSS;
+    doc.head.appendChild(style);
+  }
+  var boxes = [];
+  Array.prototype.forEach.call(root.querySelectorAll(opts.selector || 'input[data-unit], input[data-step]'), function (el) {
+    if (el.parentNode && el.parentNode.classList && el.parentNode.classList.contains('nc-step')) return; // wired already
+    var box = { el: doc.createElement('div'), input: el, minus: button('−', -1, el), plus: button('+', 1, el) };
+    box.el.className = 'nc-step';
+    el.parentNode.insertBefore(box.el, el);
+    box.el.appendChild(box.minus); box.el.appendChild(el); box.el.appendChild(box.plus);
+    el.addEventListener('keydown', onKey);
+    boxes.push(box);
+  });
+  // Disabled and at-the-limit states follow the fields, however they change.
+  function sync() { boxes.forEach(refresh); }
+  root.addEventListener('input', sync); root.addEventListener('change', sync);
+  sync();
+  return {
+    refresh: sync,
+    unwire: function () {
+      release();
+      root.removeEventListener('input', sync); root.removeEventListener('change', sync);
+      boxes.forEach(function (box) {
+        box.input.removeEventListener('keydown', onKey);
+        box.el.parentNode.insertBefore(box.input, box.el);
+        box.el.parentNode.removeChild(box.el);
+      });
+      boxes = [];
+    }
+  };
+}
+
+return { MM_PER_INCH: MM_PER_INCH, parseUnitValue: parseUnitValue, unitValueProblem: unitValueProblem, unitMmPer: unitMmPer, parseUnitMath: parseUnitMath, parseUnitQuantity: parseUnitQuantity, roundDisplay: roundDisplay, mmToDisplay: mmToDisplay, displayToMm: displayToMm, formatMm: formatMm, textToMm: textToMm, roundInches: roundInches, wireUnitFields: wireUnitFields, STEPPER_CSS: STEPPER_CSS, wireSteppers: wireSteppers };
 })();
 if (typeof window !== 'undefined') window.NcUnitInput = NcUnitInput;
 /* END ncsender-unit-input */
@@ -2038,6 +2191,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
   function showUnits() {
     ROOT.querySelectorAll('.dk-unit').forEach(function(u) { u.textContent = imperial ? 'in' : 'mm'; });
     Object.keys(LENGTHS).forEach(showField);
+    if (typeof STEPS !== 'undefined' && STEPS) STEPS.refresh();
     if (typeof testPlan === 'function' && $('dk-test-plan')) { testPlan(); showPick(); lengthsCheck(); knivesShown(); bladeShown(); }
   }
   FIELDS.forEach(function(k) {
@@ -2068,6 +2222,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = DragKnife;
     el.addEventListener('keydown', function(e) { if (e.key === 'Enter') commit(); });
   });
   NU.wireUnitFields(ROOT, { imperial: function() { return imperial; } });
+  // -/+ buttons round the number fields, for a touch screen (ncsender-unit-input 0.1.6).
+  var STEPS = NU.wireSteppers(ROOT, { imperial: function() { return imperial; }, stepOf: function(el, imp) {
+    if (!/^dk-(testStep|testDepth)$/.test(el.id) || !el.dataset.unit) return el.dataset.unit ? { step: imp ? 0.05 : 1, min: 0 } : undefined;
+    return { step: imp ? 0.005 : 0.05, min: 0 };
+  } });
   fetch(BASE_URL + '/api/settings').then(function(r) { return r.ok ? r.json() : {}; }).then(function(st) {
     imperial = (st && st.unitsPreference || 'metric') === 'imperial';
     showUnits();
